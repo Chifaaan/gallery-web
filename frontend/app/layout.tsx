@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title      : "CLIP Indonesia Search",
-  description: "Pencarian gambar multibahasa dengan AI",
+  title      : "Galeri Pencarian Gambar",
+  description: "Pencarian gambar multibahasa dengan AI berbasis CLIP × IndoBERT",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -21,22 +21,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           /* Hover effects yang tidak bisa dilakukan dengan inline style */
           .card:hover { transform: translateY(-2px); border-color: #475569 !important; }
           .imageItem:hover .imageOverlay { opacity: 1 !important; }
+          .nav-link { color: #94a3b8; text-decoration: none; font-size: 14px; padding: 8px 16px; border-radius: 8px; transition: all 0.2s ease; }
+          .nav-link:hover { color: #f1f5f9; background: rgba(148, 163, 184, 0.1); }
+          .nav-link.active { color: #f1f5f9; background: rgba(59, 130, 246, 0.15); }
         `}</style>
       </head>
       <body>
         <nav style={{
-          display: "flex", alignItems: "center", gap: 8,
-          padding: "10px 40px",
-          background: "#1e293b",
-          borderBottom: "1px solid #334155",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+          padding: "12px 40px",
+          background: "rgba(15, 23, 42, 0.8)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          borderBottom: "1px solid rgba(51, 65, 85, 0.6)",
           fontFamily: "'DM Sans', system-ui, sans-serif",
+          position: "sticky", top: 0, zIndex: 50,
         }}>
-          <Link href="/" style={{ color: "#f1f5f9", textDecoration: "none", fontWeight: 800, fontSize: 15 }}>
-            🇮🇩 CLIPIndo
-          </Link>
-          <span style={{ color: "#334155" }}>|</span>
-          <Link href="/search" style={{ color: "#94a3b8", textDecoration: "none", fontSize: 14 }}>Pencarian</Link>
-          <Link href="/manage" style={{ color: "#94a3b8", textDecoration: "none", fontSize: 14 }}>Kelola Index</Link>
+          <Link href="/search" className="nav-link">Pencarian</Link>
+          <Link href="/about" className="nav-link">About this Gallery</Link>
         </nav>
         {children}
       </body>

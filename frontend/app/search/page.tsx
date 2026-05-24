@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useSearch } from "@/hooks/useSearch";
 import { resolveImageUrl, SearchResultItem, submitFeedback, SearchResponse } from "@/lib/api";
 
@@ -16,15 +16,37 @@ const IconX = () => (
     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
   </svg>
 );
+const IconText = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
+  </svg>
+);
+const IconImage = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+  </svg>
+);
+const IconUpload = () => (
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+  </svg>
+);
 
 // ─── Main Page ────────────────────────────────────────────────
 
-export default function SearchPage() {
-  const { results, loading, error, searchText, clear } = useSearch();
+type SearchMode = "text" | "image";
 
-  const [query, setQuery]         = useState("");
-  const [topK, setTopK]           = useState(12);
+export default function SearchPage() {
+  const { results, loading, error, searchText, searchImage, clear } = useSearch();
+
+  const [mode, setMode]                 = useState<SearchMode>("text");
+  const [query, setQuery]               = useState("");
+  const [topK, setTopK]                 = useState(12);
   const [selectedItem, setSelectedItem] = useState<SearchResultItem | null>(null);
+  const [imageFile, setImageFile]       = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging]     = useState(false);
+  const fileInputRef                    = useRef<HTMLInputElement>(null);
 
   // ── Feedback Toast state ──
   const [showFeedback, setShowFeedback]   = useState(false);
@@ -32,7 +54,10 @@ export default function SearchPage() {
   const [feedbackQuery, setFeedbackQuery] = useState<{ query: string; results: SearchResponse } | null>(null);
   const [searchTimestamp, setSearchTimestamp] = useState<string>("");
 
-  const handleSubmit = useCallback(async () => {
+  const hasResults = !!results;
+
+  // ── Text search submit ──
+  const handleTextSubmit = useCallback(async () => {
     if (!query.trim()) return;
     const ts = new Date().toISOString();
     setSearchTimestamp(ts);
@@ -40,6 +65,16 @@ export default function SearchPage() {
     setFeedbackSent(false);
     await searchText(query, topK);
   }, [query, topK, searchText]);
+
+  // ── Image search submit ──
+  const handleImageSubmit = useCallback(async () => {
+    if (!imageFile) return;
+    const ts = new Date().toISOString();
+    setSearchTimestamp(ts);
+    setShowFeedback(false);
+    setFeedbackSent(false);
+    await searchImage(imageFile, topK);
+  }, [imageFile, topK, searchImage]);
 
   // Trigger feedback toast setelah results berubah (pencarian selesai)
   useEffect(() => {
@@ -58,7 +93,7 @@ export default function SearchPage() {
     try {
       await submitFeedback({
         query_text   : feedbackQuery.query,
-        category     : "text",
+        category     : mode === "text" ? "text" : "image",
         is_relevant  : isRelevant,
         timestamp    : searchTimestamp,
         elapsed_ms   : feedbackQuery.results.elapsed_ms,
@@ -70,85 +105,244 @@ export default function SearchPage() {
     }
     // Toast akan menampilkan terima kasih, lalu auto-dismiss
     setTimeout(() => setShowFeedback(false), 2000);
-  }, [feedbackQuery, searchTimestamp, topK]);
+  }, [feedbackQuery, searchTimestamp, topK, mode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) handleSubmit();
+    if (e.key === "Enter" && !e.shiftKey) handleTextSubmit();
   };
 
-  const canSubmit = !loading && !!query.trim();
+  // ── Image file handling ──
+  const handleFileSelect = (file: File) => {
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setImagePreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileSelect(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith("image/")) handleFileSelect(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => setIsDragging(false);
+
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleClear = () => {
+    clear();
+    setQuery("");
+    clearImage();
+  };
+
+  const canSubmitText  = !loading && !!query.trim();
+  const canSubmitImage = !loading && !!imageFile;
 
   return (
     <div style={styles.page}>
-      {/* ── Header ── */}
-      <header style={styles.header}>
-        <div style={styles.headerInner}>
-          <div style={styles.logo}>
-            <span style={styles.logoFlag}>🇮🇩</span>
-            <span style={styles.logoText}>CLIP<span style={styles.logoAccent}>Indo</span></span>
-          </div>
-          <p style={styles.tagline}>Pencarian gambar multibahasa berbasis AI</p>
-        </div>
-      </header>
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        .mode-tab { cursor: pointer; transition: all 0.25s ease; border: none; }
+        .mode-tab:hover { background: rgba(59, 130, 246, 0.12) !important; }
+        .search-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4); }
+        .upload-zone:hover { border-color: #3b82f6 !important; background: rgba(59, 130, 246, 0.06) !important; }
+        .result-card { transition: all 0.2s ease; cursor: pointer; }
+        .result-card:hover { transform: translateY(-3px); border-color: #475569 !important; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+      `}</style>
 
-      {/* ── Search Panel ── */}
-      <main style={styles.main}>
-        <section style={styles.searchPanel}>
-
-          {/* Text input */}
-          <div style={styles.textInputRow}>
-            <div style={styles.textInputWrapper}>
-              <span style={styles.searchIcon}><IconSearch /></span>
-              <input
-                style={styles.textInput}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Cari gambar dalam bahasa Indonesia, misal: anak bermain di pantai"
-                autoFocus
-              />
-              {query && (
-                <button style={styles.clearBtn} onClick={() => setQuery("")}>
-                  <IconX />
-                </button>
-              )}
+      <main style={{
+        ...styles.main,
+        ...(hasResults ? {} : styles.mainCentered),
+      }}>
+        {/* ── Search Section ── */}
+        <section style={{
+          ...styles.searchSection,
+          ...(hasResults ? {} : styles.searchSectionCentered),
+          animation: "fadeInUp 0.5s ease forwards",
+        }}>
+          {/* Title & CTA */}
+          {!hasResults && (
+            <div style={styles.heroText}>
+              <h1 style={styles.heroTitle}>Cari Gambar dengan AI</h1>
+              <p style={styles.heroSubtitle}>
+                Temukan gambar yang Anda cari menggunakan deskripsi teks atau gambar referensi
+              </p>
             </div>
-          </div>
+          )}
 
-          {/* Options */}
-          <div style={styles.options}>
-            <label style={styles.optLabel}>
-              Jumlah hasil:
-              <select
-                style={styles.optSelect}
-                value={topK}
-                onChange={(e) => setTopK(Number(e.target.value))}
-              >
-                {[6, 12, 24, 48].map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </label>
-
+          {/* Mode Toggle Tabs */}
+          <div style={styles.modeTabs}>
             <button
-              style={{ ...styles.searchBtn, ...(canSubmit ? {} : styles.searchBtnDisabled) }}
-              onClick={handleSubmit}
-              disabled={!canSubmit}
+              className="mode-tab"
+              style={{
+                ...styles.modeTab,
+                ...(mode === "text" ? styles.modeTabActive : {}),
+              }}
+              onClick={() => setMode("text")}
             >
-              {loading ? (
-                <span style={styles.spinner} />
-              ) : (
-                <><IconSearch /><span>Cari</span></>
-              )}
+              <IconText />
+              <span>Cari dengan Teks</span>
+            </button>
+            <button
+              className="mode-tab"
+              style={{
+                ...styles.modeTab,
+                ...(mode === "image" ? styles.modeTabActive : {}),
+              }}
+              onClick={() => setMode("image")}
+            >
+              <IconImage />
+              <span>Cari dengan Gambar</span>
             </button>
           </div>
 
-          {/* Error */}
-          {error && (
-            <div style={styles.errorBox}>
-              ⚠️ {error}
-            </div>
-          )}
+          {/* Search Panel */}
+          <div style={styles.searchPanel}>
+            {mode === "text" ? (
+              /* ── Text Search Mode ── */
+              <>
+                <p style={styles.ctaText}>Masukkan deskripsi teks untuk mencari gambar</p>
+                <div style={styles.textInputRow}>
+                  <div style={styles.textInputWrapper}>
+                    <span style={styles.searchIcon}><IconSearch /></span>
+                    <input
+                      style={styles.textInput}
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="misal: anak bermain di pantai, kucing tidur di sofa..."
+                      autoFocus
+                    />
+                    {query && (
+                      <button style={styles.clearBtn} onClick={() => setQuery("")}>
+                        <IconX />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div style={styles.options}>
+                  <label style={styles.optLabel}>
+                    Jumlah hasil:
+                    <select
+                      style={styles.optSelect}
+                      value={topK}
+                      onChange={(e) => setTopK(Number(e.target.value))}
+                    >
+                      {[6, 12, 24, 48].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="search-btn"
+                    style={{ ...styles.searchBtn, ...(canSubmitText ? {} : styles.searchBtnDisabled) }}
+                    onClick={handleTextSubmit}
+                    disabled={!canSubmitText}
+                  >
+                    {loading ? (
+                      <span style={styles.spinner} />
+                    ) : (
+                      <><IconSearch /><span>Cari</span></>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* ── Image Search Mode ── */
+              <>
+                <p style={styles.ctaText}>Upload gambar untuk menemukan gambar serupa</p>
+
+                {!imagePreview ? (
+                  <div
+                    className="upload-zone"
+                    style={{
+                      ...styles.uploadZone,
+                      ...(isDragging ? styles.uploadZoneDragging : {}),
+                    }}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <IconUpload />
+                    <p style={styles.uploadTitle}>
+                      {isDragging ? "Lepaskan gambar di sini..." : "Klik atau seret gambar ke sini"}
+                    </p>
+                    <p style={styles.uploadHint}>Format: JPG, PNG, WEBP · Maks 10MB</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      style={{ display: "none" }}
+                      onChange={handleFileInput}
+                    />
+                  </div>
+                ) : (
+                  <div style={styles.previewContainer}>
+                    <div style={styles.previewImageWrapper}>
+                      <img src={imagePreview} alt="Preview" style={styles.previewImage} />
+                      <button style={styles.previewRemoveBtn} onClick={clearImage}>
+                        <IconX />
+                      </button>
+                    </div>
+                    <p style={styles.previewFilename}>{imageFile?.name}</p>
+                  </div>
+                )}
+
+                <div style={styles.options}>
+                  <label style={styles.optLabel}>
+                    Jumlah hasil:
+                    <select
+                      style={styles.optSelect}
+                      value={topK}
+                      onChange={(e) => setTopK(Number(e.target.value))}
+                    >
+                      {[6, 12, 24, 48].map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="search-btn"
+                    style={{ ...styles.searchBtn, ...(canSubmitImage ? {} : styles.searchBtnDisabled) }}
+                    onClick={handleImageSubmit}
+                    disabled={!canSubmitImage}
+                  >
+                    {loading ? (
+                      <span style={styles.spinner} />
+                    ) : (
+                      <><IconSearch /><span>Cari</span></>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Error */}
+            {error && (
+              <div style={styles.errorBox}>
+                ⚠️ {error}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* ── Results ── */}
@@ -159,9 +353,11 @@ export default function SearchPage() {
                 {results.total} gambar ditemukan
               </span>
               <span style={styles.resultMeta}>
-                {results.elapsed_ms}ms · &quot;{results.query_text}&quot;
+                {results.elapsed_ms}ms
+                {results.query_text && <> · &quot;{results.query_text}&quot;</>}
+                {!results.query_text && results.query_type === "image" && <> · pencarian gambar</>}
               </span>
-              <button style={styles.clearResultsBtn} onClick={clear}>
+              <button style={styles.clearResultsBtn} onClick={handleClear}>
                 Bersihkan
               </button>
             </div>
@@ -178,14 +374,21 @@ export default function SearchPage() {
           </section>
         )}
 
-        {/* Empty state */}
+        {/* Empty state hint */}
         {!results && !loading && (
-          <div style={styles.emptyState}>
-            <div style={styles.emptyIcon}>🖼️</div>
-            <p style={styles.emptyTitle}>Mulai pencarian gambar</p>
-            <p style={styles.emptyHint}>
-              Ketik deskripsi dalam bahasa Indonesia untuk mencari gambar yang relevan
-            </p>
+          <div style={styles.emptyHints}>
+            <div style={styles.hintCard}>
+              <span style={styles.hintIcon}>💡</span>
+              <p style={styles.hintText}>Coba: <em>&quot;seorang pria bermain gitar&quot;</em></p>
+            </div>
+            <div style={styles.hintCard}>
+              <span style={styles.hintIcon}>🌊</span>
+              <p style={styles.hintText}>Coba: <em>&quot;pemandangan pantai saat senja&quot;</em></p>
+            </div>
+            <div style={styles.hintCard}>
+              <span style={styles.hintIcon}>🐕</span>
+              <p style={styles.hintText}>Coba: <em>&quot;anjing berlari di taman&quot;</em></p>
+            </div>
           </div>
         )}
       </main>
@@ -220,7 +423,7 @@ function ResultCard({ item, onClick }: { item: SearchResultItem; onClick: () => 
     item.score > 0.4 ? "#f59e0b" : "#94a3b8";
 
   return (
-    <div style={styles.card} onClick={onClick}>
+    <div className="result-card" style={styles.card} onClick={onClick}>
       <div style={styles.cardImgWrapper}>
         {!imgError ? (
           <img
@@ -324,10 +527,6 @@ function FeedbackToast({
         @keyframes toastPulse {
           0%, 100% { box-shadow: 0 8px 32px rgba(59, 130, 246, 0.15); }
           50%      { box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3); }
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
         }
         @keyframes checkPop {
           0%   { transform: scale(0); opacity: 0; }
@@ -519,42 +718,105 @@ const styles: Record<string, React.CSSProperties> = {
     color: TEXT,
     fontFamily: "'DM Sans', 'Segoe UI', system-ui, sans-serif",
   },
-  header: {
-    borderBottom: `1px solid ${BORDER}`,
-    padding: "20px 0",
-    background: `linear-gradient(135deg, ${BG} 0%, #0f2148 100%)`,
-  },
-  headerInner: {
+  main: {
     maxWidth: 1200,
     margin: "0 auto",
+    padding: "32px 24px",
+  },
+  mainCentered: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "calc(100vh - 56px)",
     padding: "0 24px",
+  },
+
+  // ── Search Section ──
+  searchSection: {
+    width: "100%",
+    maxWidth: 680,
+    margin: "0 auto",
+  },
+  searchSectionCentered: {
+    marginBottom: 40,
+  },
+
+  // ── Hero Text ──
+  heroText: {
+    textAlign: "center",
+    marginBottom: 32,
+  },
+  heroTitle: {
+    fontSize: 36,
+    fontWeight: 800,
+    letterSpacing: "-0.5px",
+    marginBottom: 10,
+    background: "linear-gradient(135deg, #f1f5f9 0%, #3b82f6 100%)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+    lineHeight: 1.2,
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: MUTED,
+    margin: 0,
+    lineHeight: 1.5,
+  },
+
+  // ── Mode Tabs ──
+  modeTabs: {
+    display: "flex",
+    gap: 4,
+    marginBottom: 16,
+    background: "rgba(15, 23, 42, 0.6)",
+    border: `1px solid ${BORDER}`,
+    borderRadius: 12,
+    padding: 4,
+  },
+  modeTab: {
+    flex: 1,
     display: "flex",
     alignItems: "center",
-    gap: 16,
+    justifyContent: "center",
+    gap: 8,
+    padding: "10px 16px",
+    borderRadius: 8,
+    background: "transparent",
+    color: MUTED,
+    fontSize: 14,
+    fontWeight: 500,
+    cursor: "pointer",
+    transition: "all 0.25s ease",
   },
-  logo: { display: "flex", alignItems: "center", gap: 8 },
-  logoFlag: { fontSize: 28 },
-  logoText: { fontSize: 24, fontWeight: 800, letterSpacing: "-0.5px" },
-  logoAccent: { color: ACCENT },
-  tagline: { color: MUTED, fontSize: 14, margin: 0 },
-  main: { maxWidth: 1200, margin: "0 auto", padding: "32px 24px" },
+  modeTabActive: {
+    background: "rgba(59, 130, 246, 0.15)",
+    color: TEXT,
+    fontWeight: 600,
+  },
 
-  // ── Search panel ──
+  // ── Search Panel ──
   searchPanel: {
     background: SURFACE,
     border: `1px solid ${BORDER}`,
     borderRadius: 16,
-    padding: 28,
-    marginBottom: 32,
+    padding: 24,
     display: "flex",
     flexDirection: "column",
-    gap: 16,
+    gap: 14,
+  },
+  ctaText: {
+    fontSize: 13,
+    color: MUTED,
+    margin: 0,
+    textAlign: "center",
   },
   textInputRow: { display: "flex", gap: 12 },
   textInputWrapper: {
     flex: 1, display: "flex", alignItems: "center",
     background: BG, border: `1px solid ${BORDER}`,
     borderRadius: 10, padding: "0 14px",
+    transition: "border-color 0.2s",
   },
   searchIcon: { color: MUTED, flexShrink: 0, display: "flex" },
   textInput: {
@@ -582,7 +844,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8, padding: "11px 28px", borderRadius: 10,
     background: ACCENT, border: "none", color: "#fff",
     fontSize: 15, fontWeight: 600, cursor: "pointer",
-    transition: "opacity 0.15s",
+    transition: "all 0.2s ease",
   },
   searchBtnDisabled: { opacity: 0.45, cursor: "not-allowed" },
   spinner: {
@@ -600,8 +862,104 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#fca5a5", fontSize: 13,
   },
 
+  // ── Upload Zone ──
+  uploadZone: {
+    border: `2px dashed ${BORDER}`,
+    borderRadius: 12,
+    padding: "32px 24px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 8,
+    cursor: "pointer",
+    color: MUTED,
+    transition: "all 0.2s ease",
+    background: "transparent",
+  },
+  uploadZoneDragging: {
+    borderColor: ACCENT,
+    background: "rgba(59, 130, 246, 0.08)",
+    color: TEXT,
+  },
+  uploadTitle: {
+    fontSize: 14,
+    fontWeight: 500,
+    margin: 0,
+  },
+  uploadHint: {
+    fontSize: 12,
+    color: MUTED,
+    margin: 0,
+    opacity: 0.7,
+  },
+
+  // ── Image Preview ──
+  previewContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 8,
+  },
+  previewImageWrapper: {
+    position: "relative",
+    borderRadius: 12,
+    overflow: "hidden",
+    border: `1px solid ${BORDER}`,
+    maxWidth: 280,
+  },
+  previewImage: {
+    width: "100%",
+    maxHeight: 200,
+    objectFit: "cover",
+    display: "block",
+  },
+  previewRemoveBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    background: "rgba(0,0,0,0.7)",
+    border: "1px solid rgba(255,255,255,0.2)",
+    color: "#fff",
+    borderRadius: 6,
+    padding: 4,
+    cursor: "pointer",
+    display: "flex",
+  },
+  previewFilename: {
+    fontSize: 12,
+    color: MUTED,
+    margin: 0,
+  },
+
+  // ── Empty State Hints ──
+  emptyHints: {
+    display: "flex",
+    gap: 12,
+    justifyContent: "center",
+    flexWrap: "wrap",
+    marginTop: 8,
+    animation: "fadeInUp 0.6s ease 0.2s both",
+  },
+  hintCard: {
+    background: "rgba(30, 41, 59, 0.5)",
+    border: `1px solid rgba(51, 65, 85, 0.5)`,
+    borderRadius: 10,
+    padding: "12px 18px",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  hintIcon: {
+    fontSize: 18,
+  },
+  hintText: {
+    fontSize: 13,
+    color: MUTED,
+    margin: 0,
+  },
+
   // ── Results ──
-  resultsSection: {},
+  resultsSection: { marginTop: 32 },
   resultsHeader: {
     display: "flex", alignItems: "center",
     gap: 12, marginBottom: 20, flexWrap: "wrap",
@@ -623,7 +981,7 @@ const styles: Record<string, React.CSSProperties> = {
   card: {
     background: SURFACE, border: `1px solid ${BORDER}`,
     borderRadius: 12, overflow: "hidden", cursor: "pointer",
-    transition: "transform 0.15s, border-color 0.15s",
+    transition: "transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
   },
   cardImgWrapper: { position: "relative", aspectRatio: "4/3", overflow: "hidden" },
   cardImg: { width: "100%", height: "100%", objectFit: "cover" },
@@ -648,14 +1006,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: "-webkit-box", WebkitLineClamp: 2,
     WebkitBoxOrient: "vertical", overflow: "hidden",
   },
-
-  // ── Empty state ──
-  emptyState: {
-    textAlign: "center", padding: "80px 24px", color: MUTED,
-  },
-  emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyTitle: { fontSize: 20, fontWeight: 600, color: TEXT, marginBottom: 8 },
-  emptyHint: { fontSize: 14, maxWidth: 400, margin: "0 auto" },
 
   // ── Modal ──
   overlay: {
