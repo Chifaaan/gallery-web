@@ -1,0 +1,16 @@
+# Added by code-review-graph
+.code-review-graph/
+.claude
+.vscode
+**/.AGENTS.md
+**/.CLAUDE.md
+**/.GEMINI.md
+**/.mcp.json
+**/.opencode.json
+**/.scratch
+**/.env.local
+.env
+**/node_modules
+**.next
+**/exported_model_old/
+**/exported_model/
