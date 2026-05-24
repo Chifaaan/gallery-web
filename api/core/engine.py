@@ -160,8 +160,10 @@ class SearchEngine:
                 with open(meta_path, encoding="utf-8") as f:
                     raw = json.load(f)
                 # Tambahkan URL placeholder
+                # Catatan: image_id dari Flickr8k sudah mengandung ekstensi
+                # (misal "3578068665_87bdacef6a.jpg"), jadi JANGAN tambahkan .jpg lagi
                 self.metadata = [
-                    {**m, "url": f"/images/{m['image_id']}.jpg"}
+                    {**m, "url": f"/images/{m['image_id']}"}
                     for m in raw
                 ]
             else:
