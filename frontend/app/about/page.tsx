@@ -104,16 +104,8 @@ export default function AboutPage() {
               <div style={S.langFlag}>🇮🇩</div>
               <h3 style={S.langTitle}>Bahasa Indonesia</h3>
               <p style={S.langDesc}>
-                Deskripsi gambar tersedia dalam Bahasa Indonesia, memungkinkan pencarian gambar 
-                dengan query berbahasa Indonesia secara alami.
-              </p>
-            </div>
-            <div className="about-card" style={S.langCard}>
-              <div style={S.langFlag}>🇬🇧</div>
-              <h3 style={S.langTitle}>Bahasa Inggris</h3>
-              <p style={S.langDesc}>
-                Dataset juga memiliki deskripsi dalam Bahasa Inggris sebagai referensi 
-                asli dari anotasi gambar.
+                Seluruh deskripsi gambar dalam galeri ini tersedia dalam Bahasa Indonesia, 
+                memungkinkan pencarian gambar dengan query berbahasa Indonesia secara alami dan intuitif.
               </p>
             </div>
           </div>
@@ -330,7 +322,8 @@ const S: Record<string, React.CSSProperties> = {
   // ── Language Cards ──
   languageCards: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "1fr",
+    maxWidth: 480,
     gap: 16,
   },
   langCard: {
