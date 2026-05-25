@@ -119,13 +119,13 @@ export default function AboutPage() {
           </div>
           <div style={S.contentCard}>
             <p style={S.paragraph}>
-              Sistem pencarian ini menggunakan model <strong>CLIP</strong> (Contrastive Language-Image 
-              Pre-training) yang dikombinasikan dengan <strong>IndoBERT</strong> — sebuah model bahasa 
-              yang dioptimalkan untuk Bahasa Indonesia.
+              Sistem pencarian ini menggunakan model <strong>CLIP ViT-B/32</strong> (Contrastive Language-Image
+              Pre-training) yang telah di-<em>fine-tune</em> pada dataset Flickr30K-Indonesia untuk
+              mengoptimalkan kemampuan pencarian gambar berbahasa Indonesia.
             </p>
             <p style={S.paragraph}>
-              Dengan pendekatan ini, sistem dapat memahami hubungan antara teks berbahasa Indonesia 
-              dengan gambar, sehingga memungkinkan pencarian gambar secara semantik — bukan hanya 
+              Dengan pendekatan ini, sistem dapat memahami hubungan antara teks berbahasa Indonesia
+              dengan gambar, sehingga memungkinkan pencarian gambar secara semantik — bukan hanya
               mencocokkan kata kunci, tetapi memahami <em>makna</em> dari deskripsi yang diberikan.
             </p>
             <div style={S.techFeatures}>

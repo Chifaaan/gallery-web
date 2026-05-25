@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title      : "Galeri Pencarian Gambar",
-  description: "Pencarian gambar multibahasa dengan AI berbasis CLIP × IndoBERT",
+  description: "Pencarian gambar dengan AI berbasis CLIP ViT-B/32 (Fine-tuned)",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,6 +1,6 @@
 """
 core/engine.py
-Wrapper utama untuk model CLIP Indonesia — load, encode, search, index management.
+Wrapper utama untuk model CLIP Vanilla (Fine-tuned) — load, encode, search, index management.
 """
 
 import json
@@ -15,70 +15,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from transformers import AutoModel, AutoTokenizer
 import open_clip
-import torch.nn as nn
-
-
-# ─── Arsitektur (harus identik dengan notebook training) ───
-
-class ProjectionHead(nn.Module):
-    def __init__(self, in_dim=768, out_dim=512, dropout=0.1):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, in_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(in_dim, out_dim),
-            nn.LayerNorm(out_dim),
-        )
-
-    def forward(self, x):
-        return self.net(x)
-
-
-class IndoBERTTextEncoder(nn.Module):
-    def __init__(self, model_name: str, embed_dim: int = 512):
-        super().__init__()
-        self.bert = AutoModel.from_pretrained(model_name)
-        self.projection = ProjectionHead(
-            in_dim=self.bert.config.hidden_size,
-            out_dim=embed_dim,
-        )
-
-    def forward(self, input_ids, attention_mask):
-        out = self.bert(input_ids=input_ids, attention_mask=attention_mask)
-        cls = out.last_hidden_state[:, 0, :]
-        return F.normalize(self.projection(cls), dim=-1)
-
-
-class CLIPIndonesianModel(nn.Module):
-    def __init__(self, clip_model_name: str, clip_pretrained: str,
-                 indobert_name: str, embed_dim: int = 512):
-        super().__init__()
-        clip_model, _, _ = open_clip.create_model_and_transforms(
-            clip_model_name, pretrained=clip_pretrained
-        )
-        self.image_encoder = clip_model.visual
-        for p in self.image_encoder.parameters():
-            p.requires_grad = False
-        self.image_encoder.eval()
-
-        self.text_encoder = IndoBERTTextEncoder(indobert_name, embed_dim)
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-
-    @torch.no_grad()
-    def encode_image(self, images: torch.Tensor) -> torch.Tensor:
-        self.image_encoder.eval()
-        feats = self.image_encoder(images)
-        if isinstance(feats, tuple):
-            feats = feats[0]
-        return F.normalize(feats.float(), dim=-1)
-
-    @torch.no_grad()
-    def encode_text(self, input_ids: torch.Tensor,
-                    attention_mask: torch.Tensor) -> torch.Tensor:
-        return self.text_encoder(input_ids, attention_mask)
 
 
 # ─── Image transform (harus sama dengan training) ───
@@ -99,15 +36,15 @@ IMAGE_TRANSFORM = T.Compose([
 
 class SearchEngine:
     """
-    Encapsulates the trained model and image index.
+    Encapsulates the trained CLIP Vanilla (Fine-tuned) model and image index.
     Thread-safe untuk digunakan dalam FastAPI async context.
     """
 
     def __init__(self, export_dir: str, device: str = "auto"):
         self.export_dir = Path(export_dir)
         self.device = self._resolve_device(device)
-        self.model: Optional[CLIPIndonesianModel] = None
-        self.tokenizer = None
+        self.model = None                               # open_clip CLIP model
+        self.tokenizer = None                           # open_clip tokenizer
         self.image_index: Optional[np.ndarray] = None   # [N, 512]
         self.metadata: list[dict] = []                  # [{image_id, url, captions_id, ...}]
         self.index_path = Path("./storage/index.npy")
@@ -121,29 +58,62 @@ class SearchEngine:
 
     async def load(self):
         """Load model dan index. Dipanggil saat startup."""
-        checkpoint = torch.load(
-            self.export_dir / "indobert_text_encoder.pt",
+
+        # 1. Load finetuned text encoder checkpoint (untuk config + text weights)
+        text_ckpt = torch.load(
+            self.export_dir / "clip_text_encoder_finetuned.pt",
             map_location=self.device,
+            weights_only=False,
         )
-        cfg = checkpoint["config"]
+        cfg = text_ckpt["config"]
 
-        self.model = CLIPIndonesianModel(
-            clip_model_name=cfg["clip_model"],
-            clip_pretrained=cfg["clip_pretrained"],
-            indobert_name=cfg["indobert_model"],
-            embed_dim=cfg["embed_dim"],
-        ).to(self.device)
+        # 2. Buat arsitektur model CLIP via open_clip
+        clip_model, _, _ = open_clip.create_model_and_transforms(
+            cfg["clip_model"],
+            pretrained=cfg["clip_pretrained"],
+        )
+        clip_model = clip_model.to(self.device)
 
-        self.model.text_encoder.load_state_dict(checkpoint["model_state"])
+        # 3. Load image encoder dari full model checkpoint (paling aman)
+        full_ckpt = torch.load(
+            self.export_dir / "clip_vanilla_model.pt",
+            map_location=self.device,
+            weights_only=False,
+        )
+        # Key mapping: checkpoint pakai "image_encoder.*", open_clip pakai "visual.*"
+        full_state = full_ckpt["model_state"]
+        mapped_state = {}
+        for k, v in full_state.items():
+            if k.startswith("image_encoder."):
+                mapped_state[k.replace("image_encoder.", "visual.")] = v
+            else:
+                mapped_state[k] = v
+        # Load semua weights (strict=False karena attn_mask adalah buffer non-persistent)
+        clip_model.load_state_dict(mapped_state, strict=False)
 
-        ls_ckpt = torch.load(self.export_dir / "logit_scale.pt", map_location=self.device)
-        self.model.logit_scale.data = ls_ckpt["logit_scale"]
+        # 4. Override text encoder dengan finetuned weights
+        clip_model.transformer.load_state_dict(text_ckpt["transformer"])
+        clip_model.token_embedding.load_state_dict(text_ckpt["token_embedding"])
+        clip_model.positional_embedding.data = text_ckpt["positional_embedding"].to(self.device)
+        clip_model.ln_final.load_state_dict(
+            {k: v.to(self.device) for k, v in text_ckpt["ln_final"].items()}
+        )
+        clip_model.text_projection.data = text_ckpt["text_projection"].to(self.device)
+        clip_model.logit_scale.data = text_ckpt["logit_scale"].to(self.device)
 
-        self.model.eval()
-        self.tokenizer = AutoTokenizer.from_pretrained(cfg["indobert_model"])
+        clip_model.eval()
+        self.model = clip_model
 
-        # Load persisted index (atau fallback ke exported_model)
+        # 5. Tokenizer CLIP
+        self.tokenizer = open_clip.get_tokenizer(cfg["clip_model"])
+
+        # 6. Load persisted index (atau fallback ke exported_model)
         self._load_index()
+
+        # Bebaskan memori full checkpoint
+        del full_ckpt, text_ckpt, full_state, mapped_state
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def _load_index(self):
         """Load image index dan metadata dari storage."""
@@ -160,7 +130,7 @@ class SearchEngine:
                 with open(meta_path, encoding="utf-8") as f:
                     raw = json.load(f)
                 # Tambahkan URL placeholder
-                # Catatan: image_id dari Flickr8k sudah mengandung ekstensi
+                # Catatan: image_id dari Flickr sudah mengandung ekstensi
                 # (misal "3578068665_87bdacef6a.jpg"), jadi JANGAN tambahkan .jpg lagi
                 self.metadata = [
                     {**m, "url": f"/images/{m['image_id']}"}
@@ -189,23 +159,20 @@ class SearchEngine:
 
     @torch.no_grad()
     def _encode_text(self, text: str) -> np.ndarray:
-        tokens = self.tokenizer(
-            text, return_tensors="pt",
-            padding=True, truncation=True, max_length=64,
-        ).to(self.device)
-        emb = self.model.encode_text(tokens["input_ids"], tokens["attention_mask"])
-        return emb.cpu().numpy()  # [1, 512]
+        tokens = self.tokenizer(text).to(self.device)   # [1, 77]
+        emb = self.model.encode_text(tokens, normalize=True)
+        return emb.float().cpu().numpy()  # [1, 512]
 
     @torch.no_grad()
     def _encode_image(self, pil_image: Image.Image) -> np.ndarray:
         img_tensor = IMAGE_TRANSFORM(pil_image.convert("RGB")).unsqueeze(0).to(self.device)
-        emb = self.model.encode_image(img_tensor)
-        return emb.cpu().numpy()  # [1, 512]
+        emb = self.model.encode_image(img_tensor, normalize=True)
+        return emb.float().cpu().numpy()  # [1, 512]
 
     # ─── Search ───
 
     def search_by_text(self, query: str, top_k: int = 10) -> list[dict]:
-        """Cari gambar berdasarkan teks bahasa Indonesia."""
+        """Cari gambar berdasarkan teks."""
         if len(self.metadata) == 0:
             return []
         query_emb = self._encode_text(query)     # [1, 512]

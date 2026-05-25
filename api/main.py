@@ -1,6 +1,6 @@
 """
 CLIP Indonesia Search API
-FastAPI server untuk pencarian gambar multibahasa berbasis CLIP + IndoBERT
+FastAPI server untuk pencarian gambar berbasis CLIP Vanilla (Fine-tuned)
 """
 
 from fastapi import FastAPI
@@ -36,8 +36,8 @@ async def lifespan(app: FastAPI):
 # ─── App ───
 app = FastAPI(
     title="CLIP Indonesia Search API",
-    description="API pencarian gambar multibahasa menggunakan CLIP + IndoBERT",
-    version="1.0.0",
+    description="API pencarian gambar menggunakan CLIP ViT-B/32 Vanilla (Fine-tuned)",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
