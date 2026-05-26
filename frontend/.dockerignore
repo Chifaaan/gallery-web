@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+
+# Environment
+.env
+.env.*
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+Dockerfile.nextjs
+docker-compose*.yml
+
+# Agent files
+.AGENTS.md
+.CLAUDE.md
+.GEMINI.md
+.mcp.json
+.scratch/

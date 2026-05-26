@@ -1,0 +1,81 @@
+# ──────────────────────────────────────────────────────────────
+# CLIP Indonesia Search — Docker Compose
+# ──────────────────────────────────────────────────────────────
+# Usage:
+#   docker compose up --build        → build & start semua services
+#   docker compose up -d             → start background (detached)
+#   docker compose down              → stop & remove containers
+#   docker compose logs -f           → follow logs
+#   docker compose logs -f api       → follow logs API saja
+# ──────────────────────────────────────────────────────────────
+
+services:
+  # ── FastAPI Backend ──────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: clip-indo-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - MODEL_DIR=${MODEL_DIR:-./exported_model}
+      - DEVICE=${DEVICE:-cpu}
+      - PORT=8000
+      - ENV=production
+      - CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+    volumes:
+      # Model files — mount dari host agar tidak masuk image
+      - ./api/exported_model:/app/exported_model:ro
+      # Storage — persistent volume untuk uploaded images
+      - api-storage:/app/storage
+      # SQLite database — persistent volume untuk feedback
+      - api-data:/app/data
+    networks:
+      - clip-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # ── Next.js Frontend ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Build-time: baked into the JS bundle
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    container_name: clip-indo-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      # Runtime: server-side rewrites inside Docker network
+      - API_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - clip-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+# ── Volumes ────────────────────────────────────────────────────
+volumes:
+  api-storage:
+    driver: local
+  api-data:
+    driver: local
+
+# ── Network ────────────────────────────────────────────────────
+networks:
+  clip-net:
+    driver: bridge
