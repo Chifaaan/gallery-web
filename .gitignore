@@ -14,4 +14,5 @@
 **.next
 **/exported_model_IndoBERT_8K/
 **/exported_model_IndoBERT_Tuned/
-**/exported_model/
+**/exported_model
+**/exported_model_mclip

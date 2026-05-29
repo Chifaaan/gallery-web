@@ -3,6 +3,7 @@ core/engine.py
 Wrapper utama untuk model CLIP Vanilla (Fine-tuned) — load, encode, search, index management.
 """
 
+import asyncio
 import json
 import os
 import uuid
@@ -45,10 +46,11 @@ class SearchEngine:
         self.device = self._resolve_device(device)
         self.model = None                               # open_clip CLIP model
         self.tokenizer = None                           # open_clip tokenizer
-        self.image_index: Optional[np.ndarray] = None   # [N, 512]
-        self.metadata: list[dict] = []                  # [{image_id, url, captions_id, ...}]
+        self.image_index: Optional[np.ndarray] = None  # [N, 512]
+        self.metadata: list[dict] = []                 # [{image_id, url, captions_id, ...}]
         self.index_path = Path("./storage/index.npy")
         self.metadata_path = Path("./storage/metadata.json")
+        self._lock = asyncio.Lock()                    # FIX #5: lock untuk operasi index concurrent
         os.makedirs("./storage", exist_ok=True)
 
     def _resolve_device(self, device: str) -> str:
@@ -56,8 +58,14 @@ class SearchEngine:
             return "cuda" if torch.cuda.is_available() else "cpu"
         return device
 
-    async def load(self):
-        """Load model dan index. Dipanggil saat startup."""
+    # FIX #4: Pisahkan logika load menjadi sync agar bisa dipanggil
+    # dari startup event via asyncio.to_thread() tanpa memblokir event loop.
+    def _load_sync(self):
+        """
+        Load model dan index secara synchronous.
+        Dipanggil dari load() melalui asyncio.to_thread() agar tidak
+        memblokir event loop FastAPI saat startup.
+        """
 
         # 1. Load finetuned text encoder checkpoint (untuk config + text weights)
         text_ckpt = torch.load(
@@ -115,6 +123,19 @@ class SearchEngine:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    async def load(self):
+        """
+        Load model dan index. Dipanggil saat startup.
+        Menjalankan _load_sync() di thread executor agar tidak memblokir
+        event loop FastAPI.
+
+        Contoh penggunaan di main.py:
+            @app.on_event("startup")
+            async def startup():
+                await engine.load()
+        """
+        await asyncio.to_thread(self._load_sync)
+
     def _load_index(self):
         """Load image index dan metadata dari storage."""
         if self.index_path.exists() and self.metadata_path.exists():
@@ -122,14 +143,38 @@ class SearchEngine:
             with open(self.metadata_path, encoding="utf-8") as f:
                 self.metadata = json.load(f)
             print(f"   Index loaded: {len(self.metadata)} images from storage")
+
         elif (self.export_dir / "image_index.npy").exists():
             # Fallback ke hasil export notebook
-            self.image_index = np.load(str(self.export_dir / "image_index.npy"))
+            raw_index = np.load(str(self.export_dir / "image_index.npy"))
             meta_path = self.export_dir / "test_metadata.json"
+
             if meta_path.exists():
                 with open(meta_path, encoding="utf-8") as f:
                     raw = json.load(f)
-                # Tambahkan URL placeholder
+
+                # FIX #2: Deduplikasi image_index jika jumlah row != jumlah gambar unik.
+                # image_index.npy dari notebook di-expand per caption (N_records),
+                # sedangkan test_metadata.json per gambar unik (N_images).
+                # Tanpa deduplikasi ini, _rank() akan IndexError karena idx > len(metadata).
+                if raw_index.shape[0] != len(raw):
+                    print(
+                        f"   [INFO] Mismatch terdeteksi: {raw_index.shape[0]} records "
+                        f"vs {len(raw)} gambar unik — melakukan deduplikasi index..."
+                    )
+                    captions_per_image = [
+                        max(len(m.get("captions_id", [])), 1) for m in raw
+                    ]
+                    unique_embs = []
+                    cursor = 0
+                    for n_cap in captions_per_image:
+                        unique_embs.append(raw_index[cursor])
+                        cursor += n_cap
+                    raw_index = np.vstack(unique_embs)  # [N_images, 512]
+                    print(f"   [INFO] image_index setelah deduplikasi: {raw_index.shape}")
+
+                self.image_index = raw_index
+
                 # Catatan: image_id dari Flickr sudah mengandung ekstensi
                 # (misal "3578068665_87bdacef6a.jpg"), jadi JANGAN tambahkan .jpg lagi
                 self.metadata = [
@@ -137,12 +182,15 @@ class SearchEngine:
                     for m in raw
                 ]
             else:
+                self.image_index = raw_index
                 self.metadata = [
                     {"image_id": str(i), "url": "", "captions_id": []}
-                    for i in range(len(self.image_index))
+                    for i in range(len(raw_index))
                 ]
+
             self._persist_index()
             print(f"   Index loaded: {len(self.metadata)} images from export_dir")
+
         else:
             # Empty index — siap menerima gambar baru
             self.image_index = np.empty((0, 512), dtype=np.float32)
@@ -159,15 +207,20 @@ class SearchEngine:
 
     @torch.no_grad()
     def _encode_text(self, text: str) -> np.ndarray:
+        # FIX #1: Hapus normalize=True — tidak ada di semua versi open_clip.
+        # Normalisasi dilakukan manual dengan F.normalize() yang aman di semua versi.
         tokens = self.tokenizer(text).to(self.device)   # [1, 77]
-        emb = self.model.encode_text(tokens, normalize=True)
-        return emb.float().cpu().numpy()  # [1, 512]
+        emb = self.model.encode_text(tokens)
+        emb = F.normalize(emb.float(), dim=-1)          # L2 normalize
+        return emb.cpu().numpy()                        # [1, 512]
 
     @torch.no_grad()
     def _encode_image(self, pil_image: Image.Image) -> np.ndarray:
+        # FIX #1: Sama — hapus normalize=True, normalisasi manual.
         img_tensor = IMAGE_TRANSFORM(pil_image.convert("RGB")).unsqueeze(0).to(self.device)
-        emb = self.model.encode_image(img_tensor, normalize=True)
-        return emb.float().cpu().numpy()  # [1, 512]
+        emb = self.model.encode_image(img_tensor)
+        emb = F.normalize(emb.float(), dim=-1)          # L2 normalize
+        return emb.cpu().numpy()                        # [1, 512]
 
     # ─── Search ───
 
@@ -175,14 +228,14 @@ class SearchEngine:
         """Cari gambar berdasarkan teks."""
         if len(self.metadata) == 0:
             return []
-        query_emb = self._encode_text(query)     # [1, 512]
+        query_emb = self._encode_text(query)    # [1, 512]
         return self._rank(query_emb, top_k)
 
     def search_by_image(self, pil_image: Image.Image, top_k: int = 10) -> list[dict]:
         """Cari gambar serupa berdasarkan gambar query."""
         if len(self.metadata) == 0:
             return []
-        query_emb = self._encode_image(pil_image)  # [1, 512]
+        query_emb = self._encode_image(pil_image)   # [1, 512]
         return self._rank(query_emb, top_k)
 
     def search_by_text_and_image(
@@ -227,6 +280,10 @@ class SearchEngine:
         Tambahkan gambar baru ke index.
         images_with_meta: [{"pil_image": PIL.Image, "captions_id": [...], "url": str, ...}]
         Returns: list of assigned image_ids
+
+        Catatan: fitur ini belum digunakan. Lock asyncio (_lock) sudah
+        disiapkan di __init__ apabila fitur ini diaktifkan di masa mendatang
+        untuk mencegah race condition pada concurrent request.
         """
         new_embs = []
         new_meta = []
@@ -249,7 +306,7 @@ class SearchEngine:
             })
 
         if new_embs:
-            new_matrix = np.vstack(new_embs)       # [M, 512]
+            new_matrix = np.vstack(new_embs)        # [M, 512]
             if self.image_index.shape[0] == 0:
                 self.image_index = new_matrix
             else:
@@ -305,7 +362,7 @@ class SearchEngine:
         if idx is None:
             raise ValueError(f"Image ID tidak ditemukan: {image_id}")
 
-        image_embedding = self.image_index[idx]  # [512]
+        image_embedding = self.image_index[idx]     # [512]
 
         analyzer = ExplainabilityAnalyzer()
         return analyzer.analyze(
