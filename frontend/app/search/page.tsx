@@ -8,27 +8,27 @@ import { resolveImageUrl, SearchResultItem, submitFeedback, SearchResponse } fro
 
 const IconSearch = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
   </svg>
 );
 const IconX = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
   </svg>
 );
 const IconText = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
+    <path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" />
   </svg>
 );
 const IconImage = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" />
   </svg>
 );
 const IconUpload = () => (
   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17,8 12,3 7,8" /><line x1="12" y1="3" x2="12" y2="15" />
   </svg>
 );
 
@@ -39,18 +39,18 @@ type SearchMode = "text" | "image";
 export default function SearchPage() {
   const { results, loading, error, searchText, searchImage, clear } = useSearch();
 
-  const [mode, setMode]                 = useState<SearchMode>("text");
-  const [query, setQuery]               = useState("");
-  const [topK, setTopK]                 = useState(12);
+  const [mode, setMode] = useState<SearchMode>("text");
+  const [query, setQuery] = useState("");
+  const [topK, setTopK] = useState(12);
   const [selectedItem, setSelectedItem] = useState<SearchResultItem | null>(null);
-  const [imageFile, setImageFile]       = useState<File | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isDragging, setIsDragging]     = useState(false);
-  const fileInputRef                    = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Feedback Toast state ──
-  const [showFeedback, setShowFeedback]   = useState(false);
-  const [feedbackSent, setFeedbackSent]   = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
   const [feedbackQuery, setFeedbackQuery] = useState<{ query: string; results: SearchResponse } | null>(null);
   const [searchTimestamp, setSearchTimestamp] = useState<string>("");
 
@@ -92,12 +92,12 @@ export default function SearchPage() {
     setFeedbackSent(true);
     try {
       await submitFeedback({
-        query_text   : feedbackQuery.query,
-        category     : mode === "text" ? "text" : "image",
-        is_relevant  : isRelevant,
-        timestamp    : searchTimestamp,
-        elapsed_ms   : feedbackQuery.results.elapsed_ms,
-        top_k        : topK,
+        query_text: feedbackQuery.query,
+        category: mode === "text" ? "text" : "image",
+        is_relevant: isRelevant,
+        timestamp: searchTimestamp,
+        elapsed_ms: feedbackQuery.results.elapsed_ms,
+        top_k: topK,
         total_results: feedbackQuery.results.total,
       });
     } catch (e) {
@@ -150,7 +150,34 @@ export default function SearchPage() {
     clearImage();
   };
 
-  const canSubmitText  = !loading && !!query.trim();
+  const handleModeChange = (newMode: SearchMode) => {
+    setMode(newMode);
+    handleClear();
+  };
+
+  const handleTopKChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newK = Number(e.target.value);
+    setTopK(newK);
+    
+    // Automatically re-fetch if there are already results
+    if (hasResults) {
+      if (mode === "text" && query.trim()) {
+        const ts = new Date().toISOString();
+        setSearchTimestamp(ts);
+        setShowFeedback(false);
+        setFeedbackSent(false);
+        await searchText(query, newK);
+      } else if (mode === "image" && imageFile) {
+        const ts = new Date().toISOString();
+        setSearchTimestamp(ts);
+        setShowFeedback(false);
+        setFeedbackSent(false);
+        await searchImage(imageFile, newK);
+      }
+    }
+  };
+
+  const canSubmitText = !loading && !!query.trim();
   const canSubmitImage = !loading && !!imageFile;
 
   return (
@@ -183,7 +210,7 @@ export default function SearchPage() {
             <div style={styles.heroText}>
               <h1 style={styles.heroTitle}>Cari Gambar dengan AI</h1>
               <p style={styles.heroSubtitle}>
-                Temukan gambar yang Anda cari menggunakan deskripsi teks atau gambar referensi
+                Sistem ini dapat mencari dari koleksi 1.000 foto kehidupan nyata yang mencakup aktivitas manusia, hewan, alam, dan lingkungan sehari-hari. Deskripsikan gambar yang kamu bayangkan dalam Bahasa Indonesia, dan sistem akan menemukan foto yang paling relevan.
               </p>
             </div>
           )}
@@ -196,7 +223,7 @@ export default function SearchPage() {
                 ...styles.modeTab,
                 ...(mode === "text" ? styles.modeTabActive : {}),
               }}
-              onClick={() => setMode("text")}
+              onClick={() => handleModeChange("text")}
             >
               <IconText />
               <span>Cari dengan Teks</span>
@@ -207,7 +234,7 @@ export default function SearchPage() {
                 ...styles.modeTab,
                 ...(mode === "image" ? styles.modeTabActive : {}),
               }}
-              onClick={() => setMode("image")}
+              onClick={() => handleModeChange("image")}
             >
               <IconImage />
               <span>Cari dengan Gambar</span>
@@ -244,7 +271,7 @@ export default function SearchPage() {
                     <select
                       style={styles.optSelect}
                       value={topK}
-                      onChange={(e) => setTopK(Number(e.target.value))}
+                      onChange={handleTopKChange}
                     >
                       {[6, 12, 24, 48].map((n) => (
                         <option key={n} value={n}>{n}</option>
@@ -313,7 +340,7 @@ export default function SearchPage() {
                     <select
                       style={styles.optSelect}
                       value={topK}
-                      onChange={(e) => setTopK(Number(e.target.value))}
+                      onChange={handleTopKChange}
                     >
                       {[6, 12, 24, 48].map((n) => (
                         <option key={n} value={n}>{n}</option>
@@ -420,7 +447,7 @@ function ResultCard({ item, onClick }: { item: SearchResultItem; onClick: () => 
   const scorePercent = Math.round(item.score * 100);
   const scoreColor =
     item.score > 0.7 ? "#22c55e" :
-    item.score > 0.4 ? "#f59e0b" : "#94a3b8";
+      item.score > 0.4 ? "#f59e0b" : "#94a3b8";
 
   return (
     <div className="result-card" style={styles.card} onClick={onClick}>
@@ -705,11 +732,11 @@ const toastStyles: Record<string, React.CSSProperties> = {
 // ─── Styles (CSS-in-JS) ───────────────────────────────────────
 
 const ACCENT = "#3b82f6";
-const BG     = "#0f172a";
-const SURFACE= "#1e293b";
+const BG = "#0f172a";
+const SURFACE = "#1e293b";
 const BORDER = "#334155";
-const TEXT   = "#f1f5f9";
-const MUTED  = "#94a3b8";
+const TEXT = "#f1f5f9";
+const MUTED = "#94a3b8";
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
