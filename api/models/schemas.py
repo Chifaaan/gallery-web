@@ -66,8 +66,8 @@ class IndexStatsResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status     : str
-    version    : str = "2.0.0"
-    model      : str = "CLIP ViT-B/32 (Fine-tuned)"
+    version    : str = "3.0.0"
+    model      : str = "CLIP + XLM-RoBERTa (MCLIP)"
     timestamp  : str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 

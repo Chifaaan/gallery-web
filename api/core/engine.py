@@ -1,6 +1,11 @@
 """
 core/engine.py
-Wrapper utama untuk model CLIP Vanilla (Fine-tuned) — load, encode, search, index management.
+Wrapper utama untuk model MCLIP (CLIP + XLM-RoBERTa) — load, encode, search, index management.
+
+Arsitektur MCLIP:
+  - Text encoder:  XLM-RoBERTa-Large → linear_transform (1024→512) → adapter (norm+proj) → L2 normalize
+  - Image encoder: CLIP ViT-B/32 (pretrained, tanpa fine-tuning)
+  - Embedding space: 512-dim (shared antara text dan image)
 """
 
 import asyncio
@@ -14,12 +19,14 @@ from core.explainability import ExplainabilityAnalyzer, ExplainResult
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 import open_clip
+from transformers import XLMRobertaTokenizer, XLMRobertaModel
 
 
-# ─── Image transform (harus sama dengan training) ───
+# ─── Image transform (harus sama dengan training CLIP ViT-B/32) ───
 import torchvision.transforms as T
 
 IMAGE_TRANSFORM = T.Compose([
@@ -33,24 +40,47 @@ IMAGE_TRANSFORM = T.Compose([
 ])
 
 
+# ─── Adapter Module (harus sama persis dengan arsitektur training) ───
+
+class MCLIPAdapter(nn.Module):
+    """
+    Adapter layer untuk fine-tuning: LayerNorm → Linear projection.
+    Digunakan setelah linear_transform untuk menyempurnakan embedding.
+    """
+    def __init__(self, embed_dim: int = 512):
+        super().__init__()
+        self.norm = nn.LayerNorm(embed_dim)
+        self.proj = nn.Linear(embed_dim, embed_dim, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.proj(self.norm(x))
+
+
 # ─── Search Engine ───
 
 class SearchEngine:
     """
-    Encapsulates the trained CLIP Vanilla (Fine-tuned) model and image index.
+    Encapsulates the trained MCLIP model (CLIP + XLM-RoBERTa) and image index.
     Thread-safe untuk digunakan dalam FastAPI async context.
     """
 
     def __init__(self, export_dir: str, device: str = "auto"):
         self.export_dir = Path(export_dir)
         self.device = self._resolve_device(device)
-        self.model = None                               # open_clip CLIP model
-        self.tokenizer = None                           # open_clip tokenizer
-        self.image_index: Optional[np.ndarray] = None  # [N, 512]
-        self.metadata: list[dict] = []                 # [{image_id, url, captions_id, ...}]
+
+        # Model components
+        self.clip_model = None                          # open_clip CLIP model (visual encoder only)
+        self.xlmr_model: Optional[XLMRobertaModel] = None   # XLM-RoBERTa text encoder
+        self.xlmr_tokenizer = None                      # XLM-RoBERTa tokenizer
+        self.linear_transform = None                    # nn.Linear(1024, 512)
+        self.adapter = None                             # MCLIPAdapter(512)
+        self.logit_scale = None                         # learnable logit scale
+
+        self.image_index: Optional[np.ndarray] = None   # [N, 512]
+        self.metadata: list[dict] = []                  # [{image_id, url, captions_id, ...}]
         self.index_path = Path("./storage/index.npy")
         self.metadata_path = Path("./storage/metadata.json")
-        self._lock = asyncio.Lock()                    # FIX #5: lock untuk operasi index concurrent
+        self._lock = asyncio.Lock()                     # lock untuk operasi index concurrent
         os.makedirs("./storage", exist_ok=True)
 
     def _resolve_device(self, device: str) -> str:
@@ -58,8 +88,6 @@ class SearchEngine:
             return "cuda" if torch.cuda.is_available() else "cpu"
         return device
 
-    # FIX #4: Pisahkan logika load menjadi sync agar bisa dipanggil
-    # dari startup event via asyncio.to_thread() tanpa memblokir event loop.
     def _load_sync(self):
         """
         Load model dan index secara synchronous.
@@ -67,61 +95,103 @@ class SearchEngine:
         memblokir event loop FastAPI saat startup.
         """
 
-        # 1. Load finetuned text encoder checkpoint (untuk config + text weights)
+        # 1. Load MCLIP text encoder checkpoint
+        print("   Loading MCLIP text encoder checkpoint...")
         text_ckpt = torch.load(
-            self.export_dir / "clip_text_encoder_finetuned.pt",
+            self.export_dir / "mclip_text_encoder.pt",
             map_location=self.device,
             weights_only=False,
         )
         cfg = text_ckpt["config"]
+        model_state = text_ckpt["model_state"]
 
-        # 2. Buat arsitektur model CLIP via open_clip
+        print(f"   Config: mclip_model={cfg['mclip_model_name']}, "
+              f"clip_model={cfg['clip_model']}, "
+              f"embed_dim={cfg['embed_dim']}, xlmr_dim={cfg['xlmr_dim']}")
+
+        # 2. Load XLM-RoBERTa tokenizer dan model architecture
+        print("   Initializing XLM-RoBERTa tokenizer & model...")
+        mclip_model_name = cfg["mclip_model_name"]
+        self.xlmr_tokenizer = XLMRobertaTokenizer.from_pretrained(mclip_model_name)
+
+        # Buat XLM-RoBERTa model architecture, lalu load finetuned weights
+        self.xlmr_model = XLMRobertaModel.from_pretrained(mclip_model_name)
+
+        # Extract XLM-RoBERTa weights dari checkpoint
+        xlmr_state = {
+            k.replace("transformer.", ""): v
+            for k, v in model_state.items()
+            if k.startswith("transformer.")
+        }
+        self.xlmr_model.load_state_dict(xlmr_state, strict=False)
+        self.xlmr_model = self.xlmr_model.to(self.device)
+        self.xlmr_model.eval()
+        print(f"   XLM-RoBERTa loaded: {sum(p.numel() for p in self.xlmr_model.parameters()):,} params")
+
+        # 3. Load linear_transform (1024 → 512)
+        embed_dim = cfg["embed_dim"]      # 512
+        xlmr_dim = cfg["xlmr_dim"]        # 1024
+
+        self.linear_transform = nn.Linear(xlmr_dim, embed_dim, bias=False)
+        self.linear_transform.weight.data = model_state["linear_transform.weight"].to(self.device)
+        self.linear_transform = self.linear_transform.to(self.device)
+        self.linear_transform.eval()
+
+        # 4. Load adapter (LayerNorm + Linear projection)
+        self.adapter = MCLIPAdapter(embed_dim)
+        adapter_state = {
+            k.replace("adapter.", ""): v
+            for k, v in model_state.items()
+            if k.startswith("adapter.")
+        }
+        self.adapter.load_state_dict(adapter_state)
+        self.adapter = self.adapter.to(self.device)
+        self.adapter.eval()
+
+        # 5. Load logit_scale dari file terpisah
+        logit_scale_ckpt = torch.load(
+            self.export_dir / "logit_scale.pt",
+            map_location=self.device,
+            weights_only=False,
+        )
+        self.logit_scale = logit_scale_ckpt["logit_scale"].to(self.device)
+        print(f"   Logit scale: {self.logit_scale.item():.4f}")
+
+        # 6. Load CLIP ViT-B/32 image encoder (pretrained, tanpa fine-tuning)
+        print("   Loading CLIP ViT-B/32 image encoder (pretrained)...")
         clip_model, _, _ = open_clip.create_model_and_transforms(
             cfg["clip_model"],
             pretrained=cfg["clip_pretrained"],
         )
         clip_model = clip_model.to(self.device)
-
-        # 3. Load image encoder dari full model checkpoint (paling aman)
-        full_ckpt = torch.load(
-            self.export_dir / "clip_vanilla_model.pt",
-            map_location=self.device,
-            weights_only=False,
-        )
-        # Key mapping: checkpoint pakai "image_encoder.*", open_clip pakai "visual.*"
-        full_state = full_ckpt["model_state"]
-        mapped_state = {}
-        for k, v in full_state.items():
-            if k.startswith("image_encoder."):
-                mapped_state[k.replace("image_encoder.", "visual.")] = v
-            else:
-                mapped_state[k] = v
-        # Load semua weights (strict=False karena attn_mask adalah buffer non-persistent)
-        clip_model.load_state_dict(mapped_state, strict=False)
-
-        # 4. Override text encoder dengan finetuned weights
-        clip_model.transformer.load_state_dict(text_ckpt["transformer"])
-        clip_model.token_embedding.load_state_dict(text_ckpt["token_embedding"])
-        clip_model.positional_embedding.data = text_ckpt["positional_embedding"].to(self.device)
-        clip_model.ln_final.load_state_dict(
-            {k: v.to(self.device) for k, v in text_ckpt["ln_final"].items()}
-        )
-        clip_model.text_projection.data = text_ckpt["text_projection"].to(self.device)
-        clip_model.logit_scale.data = text_ckpt["logit_scale"].to(self.device)
-
         clip_model.eval()
-        self.model = clip_model
+        self.clip_model = clip_model
 
-        # 5. Tokenizer CLIP
-        self.tokenizer = open_clip.get_tokenizer(cfg["clip_model"])
+        # Simpan config untuk referensi
+        self.model_config = cfg
 
-        # 6. Load persisted index (atau fallback ke exported_model)
+        # 7. Load persisted index (atau fallback ke exported_model)
         self._load_index()
 
-        # Bebaskan memori full checkpoint
-        del full_ckpt, text_ckpt, full_state, mapped_state
+        # Bebaskan memori checkpoint
+        del text_ckpt, model_state, xlmr_state, logit_scale_ckpt
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+        print("   ✅ MCLIP model fully loaded!")
+
+    # Property untuk backward compatibility (digunakan di health check dll)
+    @property
+    def model(self):
+        """Backward compatibility: returns non-None jika semua komponen loaded."""
+        if self.xlmr_model is not None and self.clip_model is not None:
+            return self.clip_model  # return sesuatu non-None
+        return None
+
+    @property
+    def tokenizer(self):
+        """Backward compatibility: returns XLM-RoBERTa tokenizer."""
+        return self.xlmr_tokenizer
 
     async def load(self):
         """
@@ -153,10 +223,9 @@ class SearchEngine:
                 with open(meta_path, encoding="utf-8") as f:
                     raw = json.load(f)
 
-                # FIX #2: Deduplikasi image_index jika jumlah row != jumlah gambar unik.
+                # Deduplikasi image_index jika jumlah row != jumlah gambar unik.
                 # image_index.npy dari notebook di-expand per caption (N_records),
                 # sedangkan test_metadata.json per gambar unik (N_images).
-                # Tanpa deduplikasi ini, _rank() akan IndexError karena idx > len(metadata).
                 if raw_index.shape[0] != len(raw):
                     print(
                         f"   [INFO] Mismatch terdeteksi: {raw_index.shape[0]} records "
@@ -170,7 +239,7 @@ class SearchEngine:
                     for n_cap in captions_per_image:
                         unique_embs.append(raw_index[cursor])
                         cursor += n_cap
-                    raw_index = np.vstack(unique_embs)  # [N_images, 512]
+                    raw_index = np.vstack(unique_embs)
                     print(f"   [INFO] image_index setelah deduplikasi: {raw_index.shape}")
 
                 self.image_index = raw_index
@@ -207,20 +276,48 @@ class SearchEngine:
 
     @torch.no_grad()
     def _encode_text(self, text: str) -> np.ndarray:
-        # FIX #1: Hapus normalize=True — tidak ada di semua versi open_clip.
-        # Normalisasi dilakukan manual dengan F.normalize() yang aman di semua versi.
-        tokens = self.tokenizer(text).to(self.device)   # [1, 77]
-        emb = self.model.encode_text(tokens)
-        emb = F.normalize(emb.float(), dim=-1)          # L2 normalize
-        return emb.cpu().numpy()                        # [1, 512]
+        """
+        Encode teks menggunakan pipeline MCLIP:
+        Text → XLM-RoBERTa Tokenizer → XLM-RoBERTa Encoder → [CLS]
+          → linear_transform (1024→512) → adapter (norm+proj) → L2 normalize
+        """
+        # Tokenisasi dengan XLM-RoBERTa tokenizer
+        inputs = self.xlmr_tokenizer(
+            text,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=self.model_config.get("max_text_length", 77),
+        )
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+        # Forward pass melalui XLM-RoBERTa
+        outputs = self.xlmr_model(**inputs)
+
+        # Ambil [CLS] token embedding (posisi 0)
+        cls_emb = outputs.last_hidden_state[:, 0, :]       # [1, 1024]
+
+        # Projection: 1024 → 512
+        projected = self.linear_transform(cls_emb)          # [1, 512]
+
+        # Adapter: LayerNorm → Linear
+        adapted = self.adapter(projected)                   # [1, 512]
+
+        # L2 normalize
+        emb = F.normalize(adapted.float(), dim=-1)          # [1, 512]
+
+        return emb.cpu().numpy()                            # [1, 512]
 
     @torch.no_grad()
     def _encode_image(self, pil_image: Image.Image) -> np.ndarray:
-        # FIX #1: Sama — hapus normalize=True, normalisasi manual.
+        """
+        Encode gambar menggunakan CLIP ViT-B/32 visual encoder.
+        Pipeline sama dengan CLIP Vanilla — hanya visual encoder yang digunakan.
+        """
         img_tensor = IMAGE_TRANSFORM(pil_image.convert("RGB")).unsqueeze(0).to(self.device)
-        emb = self.model.encode_image(img_tensor)
-        emb = F.normalize(emb.float(), dim=-1)          # L2 normalize
-        return emb.cpu().numpy()                        # [1, 512]
+        emb = self.clip_model.encode_image(img_tensor)
+        emb = F.normalize(emb.float(), dim=-1)              # L2 normalize
+        return emb.cpu().numpy()                            # [1, 512]
 
     # ─── Search ───
 
@@ -368,8 +465,11 @@ class SearchEngine:
         return analyzer.analyze(
             query_text=query,
             image_embedding=image_embedding,
-            model=self.model,
-            tokenizer=self.tokenizer,
+            xlmr_model=self.xlmr_model,
+            xlmr_tokenizer=self.xlmr_tokenizer,
+            linear_transform=self.linear_transform,
+            adapter=self.adapter,
             device=self.device,
             analyses=analyses,
+            max_text_length=self.model_config.get("max_text_length", 77),
         )

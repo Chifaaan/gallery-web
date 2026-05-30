@@ -20,14 +20,14 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     environment:
-      - MODEL_DIR=${MODEL_DIR:-./exported_model}
+      - MODEL_DIR=${MODEL_DIR:-./exported_model_mclip}
       - DEVICE=${DEVICE:-cpu}
       - PORT=8000
       - ENV=production
       - CORS_ORIGINS=http://localhost:3000,http://frontend:3000
     volumes:
       # Model files — mount dari host agar tidak masuk image
-      - ./api/exported_model:/app/exported_model:ro
+      - ./api/exported_model_mclip:/app/exported_model_mclip:ro
       # Storage — persistent volume untuk uploaded images
       - api-storage:/app/storage
       # SQLite database — persistent volume untuk feedback
