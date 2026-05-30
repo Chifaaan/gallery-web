@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 import open_clip
-from transformers import XLMRobertaTokenizer, XLMRobertaModel
+from transformers import XLMRobertaTokenizer, XLMRobertaModel, XLMRobertaConfig
 
 
 # ─── Image transform (harus sama dengan training CLIP ViT-B/32) ───
@@ -111,11 +111,15 @@ class SearchEngine:
 
         # 2. Load XLM-RoBERTa tokenizer dan model architecture
         print("   Initializing XLM-RoBERTa tokenizer & model...")
-        mclip_model_name = cfg["mclip_model_name"]
-        self.xlmr_tokenizer = XLMRobertaTokenizer.from_pretrained(mclip_model_name)
+        # Use xlm-roberta-large instead of M-CLIP/XLM-Roberta-Large-Vit-B-32 
+        # to ensure the correct 1024-dim architecture (the M-CLIP config is broken/768-dim)
+        # and to avoid downloading a 2GB model just to overwrite it.
+        base_name = "xlm-roberta-large"
+        self.xlmr_tokenizer = XLMRobertaTokenizer.from_pretrained(base_name)
 
-        # Buat XLM-RoBERTa model architecture, lalu load finetuned weights
-        self.xlmr_model = XLMRobertaModel.from_pretrained(mclip_model_name)
+        # Buat XLM-RoBERTa model architecture dari config, lalu load finetuned weights
+        config = XLMRobertaConfig.from_pretrained(base_name)
+        self.xlmr_model = XLMRobertaModel(config)
 
         # Extract XLM-RoBERTa weights dari checkpoint
         xlmr_state = {
