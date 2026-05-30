@@ -16,4 +16,6 @@
 **/exported_model_IndoBERT_Tuned/
 **/exported_model/
 **/exported_model_mclip
+**/exported_model_clip
 **/storage
+__pycache__/
