@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { resolveImageUrl, listIndexImages, IndexListResponse } from "@/lib/api";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { resolveImageUrl, listIndexImages } from "@/lib/api";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -16,35 +16,74 @@ interface SampleImage {
 // ─── Main Page ───────────────────────────────────────────────
 
 export default function AboutPage() {
-  const [samples, setSamples] = useState<SampleImage[]>([]);
-  const [loadingSamples, setLoadingSamples] = useState(true);
+  const [exploreSamples, setExploreSamples] = useState<SampleImage[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loaderRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Infinite Scroll Fetching ──
+  const fetchExploreImages = useCallback(async (pageToFetch: number) => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await listIndexImages(pageToFetch, 12);
+      const newImages = data.items.map((item) => ({
+        image_id: item.image_id,
+        url: item.url,
+        captions_id: item.captions_id,
+        captions_en: item.captions_en,
+        filename: item.filename,
+      }));
+      
+      setExploreSamples((prev) => {
+        const existingIds = new Set(prev.map(img => img.image_id));
+        const filteredNew = newImages.filter(img => !existingIds.has(img.image_id));
+        return [...prev, ...filteredNew];
+      });
+      setHasMore(data.page < data.total_pages);
+      setPage(pageToFetch + 1);
+    } catch {
+      console.error("Gagal memuat gambar eksplorasi");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore]);
+
+  // Initial load
   useEffect(() => {
-    const fetchSamples = async () => {
-      try {
-        const data = await listIndexImages(1, 6);
-        setSamples(
-          data.items.map((item) => ({
-            image_id: item.image_id,
-            url: item.url,
-            captions_id: item.captions_id,
-            captions_en: item.captions_en,
-            filename: item.filename,
-          }))
-        );
-      } catch {
-        console.error("Gagal memuat contoh gambar");
-      } finally {
-        setLoadingSamples(false);
-      }
-    };
-    fetchSamples();
+    fetchExploreImages(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Intersection Observer setup
+  useEffect(() => {
+    if (loadingMore) return;
+    
+    if (observerRef.current) observerRef.current.disconnect();
+
+    observerRef.current = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMore) {
+        fetchExploreImages(page);
+      }
+    });
+
+    if (loaderRef.current) {
+      observerRef.current.observe(loaderRef.current);
+    }
+
+    return () => observerRef.current?.disconnect();
+  }, [loadingMore, hasMore, fetchExploreImages, page]);
+
 
   return (
     <div style={S.page}>
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes pulseBorder { 0%, 100% { border-color: rgba(59, 130, 246, 0.3); } 50% { border-color: rgba(59, 130, 246, 0.8); } }
         .about-card { transition: all 0.2s ease; }
         .about-card:hover { transform: translateY(-2px); border-color: #475569 !important; }
         .sample-card { transition: all 0.25s ease; }
@@ -58,10 +97,23 @@ export default function AboutPage() {
             <span style={S.heroTagIcon}>📚</span>
             <span>Tentang Dataset</span>
           </div>
-          <h1 style={S.heroTitle}>About this Gallery</h1>
+          <h1 style={S.heroTitle}>Flickr30K Indonesia</h1>
           <p style={S.heroSubtitle}>
             Memahami dataset yang digunakan dalam sistem pencarian gambar ini
           </p>
+          
+          {/* Top 3 Frames Example */}
+          <div style={{ display: "flex", gap: "16px", justifyContent: "center", marginTop: "32px", flexWrap: "wrap" }}>
+            <div style={S.topFrame}>
+              <img src={resolveImageUrl("/images/1007129816.jpg")} alt="Frame 1" style={S.topFrameImg} />
+            </div>
+            <div style={S.topFrame}>
+              <img src={resolveImageUrl("/images/1009434119.jpg")} alt="Frame 2" style={S.topFrameImg} />
+            </div>
+            <div style={S.topFrame}>
+              <img src={resolveImageUrl("/images/101362133.jpg")} alt="Frame 3" style={S.topFrameImg} />
+            </div>
+          </div>
         </div>
       </header>
 
@@ -70,26 +122,26 @@ export default function AboutPage() {
         <section style={{ ...S.section, animation: "fadeInUp 0.5s ease forwards" }}>
           <div style={S.sectionHeader}>
             <span style={S.sectionIcon}>🖼️</span>
-            <h2 style={S.sectionTitle}>Flickr8k Dataset</h2>
+            <h2 style={S.sectionTitle}>Flickr30K Dataset</h2>
           </div>
           <div style={S.contentCard}>
             <p style={S.paragraph}>
-              <strong>Flickr8k</strong> adalah kumpulan dataset gambar yang bersumber dari platform 
-              Flickr. Dataset ini berisi sekitar <strong>8.000 gambar</strong> yang menampilkan berbagai 
+              <strong>Flickr30K</strong> adalah kumpulan dataset gambar yang bersumber dari platform 
+              Flickr. Dataset aslinya berisi sekitar <strong>31.000 gambar</strong> yang menampilkan berbagai 
               aktivitas sehari-hari, mulai dari orang-orang yang beraktivitas, hewan peliharaan, 
               pemandangan alam, hingga kegiatan olahraga dan rekreasi.
             </p>
-            <p style={S.paragraph}>
-              Setiap gambar dalam dataset ini dilengkapi dengan deskripsi teks yang menjelaskan 
-              isi gambar secara detail. Deskripsi-deskripsi ini ditulis oleh anotator manusia 
-              untuk menangkap konteks visual dari setiap gambar.
-            </p>
-            <p style={S.paragraph}>
-              Dataset Flickr8k banyak digunakan dalam penelitian <em>image-text retrieval</em>,
-              yaitu mencari gambar berdasarkan deskripsi teks dan sebaliknya. Dataset ini menjadi 
-              salah satu benchmark populer dalam bidang <em>computer vision</em> dan 
-              <em> natural language processing</em>.
-            </p>
+            
+            <div style={S.alertBox}>
+              <strong style={{ display: "block", marginBottom: 6, color: "#f87171" }}>⚠️ Panduan Pencarian:</strong>
+              <ul style={{ margin: 0, paddingLeft: 20, color: "#f1f5f9", fontSize: 14, lineHeight: 1.6 }}>
+                <li><strong>Yang BISA dicari:</strong> Deskripsi visual benda, aktivitas, bentuk, warna, jumlah orang, dan ekspresi. <em>(Misal: "Seorang anak kecil berbaju merah sedang bermain bola di taman hijau")</em></li>
+                <li><strong>Yang TIDAK BISA dicari:</strong> Nama orang spesifik (misal: "Jokowi"), Nama tempat/gedung spesifik (misal: "Monas", "Jakarta"), atau Merek/Brand spesifik (misal: "iPhone", "Nike").</li>
+              </ul>
+              <p style={{ marginTop: 10, marginBottom: 0, fontSize: 13, color: "#94a3b8" }}>
+                Gunakan deskripsi yang menggambarkan apa yang terlihat oleh mata secara langsung.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -104,114 +156,77 @@ export default function AboutPage() {
               <div style={S.langFlag}>🇮🇩</div>
               <h3 style={S.langTitle}>Bahasa Indonesia</h3>
               <p style={S.langDesc}>
-                Seluruh deskripsi gambar dalam galeri ini tersedia dalam Bahasa Indonesia, 
-                memungkinkan pencarian gambar dengan query berbahasa Indonesia secara alami dan intuitif.
+                Seluruh deskripsi gambar dalam model ini diproses dengan pemahaman Bahasa Indonesia, 
+                memungkinkan pencarian gambar dengan kalimat kompleks secara semantik dan intuitif.
               </p>
             </div>
           </div>
         </section>
 
-        {/* ── Technology ── */}
+        {/* ── Explore (Infinite Scroll) ── */}
         <section style={{ ...S.section, animation: "fadeInUp 0.5s ease 0.2s both" }}>
           <div style={S.sectionHeader}>
-            <span style={S.sectionIcon}>🤖</span>
-            <h2 style={S.sectionTitle}>Teknologi di Balik Pencarian</h2>
-          </div>
-          <div style={S.contentCard}>
-            <p style={S.paragraph}>
-              Sistem pencarian ini menggunakan model <strong>CLIP ViT-B/32</strong> (Contrastive Language-Image
-              Pre-training) yang telah di-<em>fine-tune</em> pada dataset Flickr30K-Indonesia untuk
-              mengoptimalkan kemampuan pencarian gambar berbahasa Indonesia.
-            </p>
-            <p style={S.paragraph}>
-              Dengan pendekatan ini, sistem dapat memahami hubungan antara teks berbahasa Indonesia
-              dengan gambar, sehingga memungkinkan pencarian gambar secara semantik — bukan hanya
-              mencocokkan kata kunci, tetapi memahami <em>makna</em> dari deskripsi yang diberikan.
-            </p>
-            <div style={S.techFeatures}>
-              <div style={S.techFeature}>
-                <span style={S.techFeatureIcon}>🔍</span>
-                <div>
-                  <strong style={S.techFeatureTitle}>Pencarian Teks</strong>
-                  <p style={S.techFeatureDesc}>Cari gambar menggunakan deskripsi dalam Bahasa Indonesia</p>
-                </div>
-              </div>
-              <div style={S.techFeature}>
-                <span style={S.techFeatureIcon}>🖼️</span>
-                <div>
-                  <strong style={S.techFeatureTitle}>Pencarian Gambar</strong>
-                  <p style={S.techFeatureDesc}>Temukan gambar serupa dengan mengupload gambar referensi</p>
-                </div>
-              </div>
-              <div style={S.techFeature}>
-                <span style={S.techFeatureIcon}>⚡</span>
-                <div>
-                  <strong style={S.techFeatureTitle}>Pencarian Cepat</strong>
-                  <p style={S.techFeatureDesc}>Menggunakan cosine similarity pada embedding 512 dimensi</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Sample Images ── */}
-        <section style={{ ...S.section, animation: "fadeInUp 0.5s ease 0.3s both" }}>
-          <div style={S.sectionHeader}>
             <span style={S.sectionIcon}>📸</span>
-            <h2 style={S.sectionTitle}>Contoh Gambar dalam Dataset</h2>
+            <h2 style={S.sectionTitle}>Eksplorasi Galeri</h2>
           </div>
           <p style={{ ...S.paragraph, marginBottom: 20 }}>
-            Berikut adalah beberapa contoh gambar beserta deskripsinya yang terdapat dalam galeri ini:
+            Gulir ke bawah untuk mengeksplorasi berbagai gambar dalam koleksi ini.
           </p>
 
-          {loadingSamples ? (
+          <div style={S.sampleGrid}>
+            {exploreSamples.map((img) => (
+              <div key={img.image_id} className="sample-card" style={S.sampleCard}>
+                <div style={S.sampleImgWrapper}>
+                  <img
+                    src={resolveImageUrl(img.url)}
+                    alt={img.captions_id[0] ?? img.filename}
+                    style={S.sampleImg}
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                </div>
+                <div style={S.sampleBody}>
+                  {img.captions_id[0] && (
+                    <p style={S.sampleCaptionId}>
+                      <span style={S.captionBadge}>ID</span>
+                      {img.captions_id[0]}
+                    </p>
+                  )}
+                  {img.captions_en[0] && (
+                    <p style={S.sampleCaptionEn}>
+                      <span style={{ ...S.captionBadge, background: "rgba(34, 197, 94, 0.15)", color: "#4ade80" }}>EN</span>
+                      {img.captions_en[0]}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Loading Indicator for Infinite Scroll */}
+          {loadingMore && (
             <div style={S.loadingGrid}>
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} style={S.skeletonCard}>
+                <div key={`loader-${i}`} style={S.skeletonCard}>
                   <div style={S.skeletonImage} />
                   <div style={S.skeletonText} />
                   <div style={{ ...S.skeletonText, width: "60%" }} />
                 </div>
               ))}
             </div>
-          ) : samples.length > 0 ? (
-            <div style={S.sampleGrid}>
-              {samples.map((img) => (
-                <div key={img.image_id} className="sample-card" style={S.sampleCard}>
-                  <div style={S.sampleImgWrapper}>
-                    <img
-                      src={resolveImageUrl(img.url)}
-                      alt={img.captions_id[0] ?? img.filename}
-                      style={S.sampleImg}
-                      loading="lazy"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                  </div>
-                  <div style={S.sampleBody}>
-                    {img.captions_id[0] && (
-                      <p style={S.sampleCaptionId}>
-                        <span style={S.captionBadge}>ID</span>
-                        {img.captions_id[0]}
-                      </p>
-                    )}
-                    {img.captions_en[0] && (
-                      <p style={S.sampleCaptionEn}>
-                        <span style={{ ...S.captionBadge, background: "rgba(34, 197, 94, 0.15)", color: "#4ade80" }}>EN</span>
-                        {img.captions_en[0]}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={S.emptyState}>
-              <span style={{ fontSize: 40 }}>📂</span>
-              <p>Belum ada gambar dalam index. Tambahkan gambar melalui halaman Kelola Index.</p>
-            </div>
           )}
+
+          {/* Infinite Scroll sentinel */}
+          <div ref={loaderRef} style={{ height: "40px", marginTop: "20px" }} />
+          
+          {!hasMore && exploreSamples.length > 0 && (
+            <p style={{ textAlign: "center", color: "#94a3b8", marginTop: 20 }}>
+              Semua gambar telah dimuat.
+            </p>
+          )}
+
         </section>
       </main>
     </div>
@@ -225,7 +240,6 @@ const SURFACE = "#1e293b";
 const BORDER = "#334155";
 const TEXT = "#f1f5f9";
 const MUTED = "#94a3b8";
-const ACCENT = "#3b82f6";
 
 const S: Record<string, React.CSSProperties> = {
   page: {
@@ -242,7 +256,7 @@ const S: Record<string, React.CSSProperties> = {
     padding: "48px 24px 40px",
   },
   heroInner: {
-    maxWidth: 800,
+    maxWidth: 900,
     margin: "0 auto",
     textAlign: "center",
   },
@@ -263,8 +277,8 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 14,
   },
   heroTitle: {
-    fontSize: 40,
-    fontWeight: 800,
+    fontSize: 48,
+    fontWeight: 900, // BOLD
     letterSpacing: "-0.5px",
     marginBottom: 12,
     background: "linear-gradient(135deg, #f1f5f9 0%, #93c5fd 100%)",
@@ -277,6 +291,24 @@ const S: Record<string, React.CSSProperties> = {
     color: MUTED,
     margin: 0,
     lineHeight: 1.6,
+  },
+  
+  // ── Top Frames ──
+  topFrame: {
+    width: 140,
+    height: 140,
+    borderRadius: 16,
+    border: "4px solid rgba(255, 255, 255, 0.1)",
+    overflow: "hidden",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.4)",
+    transform: "rotate(-2deg)",
+    transition: "transform 0.3s ease",
+    background: "#1e293b",
+  },
+  topFrameImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
   },
 
   // ── Main ──
@@ -318,70 +350,43 @@ const S: Record<string, React.CSSProperties> = {
     color: "#cbd5e1",
     margin: "0 0 14px 0",
   },
+  alertBox: {
+    background: "rgba(239, 68, 68, 0.1)",
+    border: "1px solid rgba(239, 68, 68, 0.25)",
+    borderRadius: 10,
+    padding: "16px 20px",
+    marginTop: 20,
+  },
 
   // ── Language Cards ──
   languageCards: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    maxWidth: 480,
-    gap: 16,
+    display: "flex",
+    width: "100%",
   },
   langCard: {
     background: SURFACE,
     border: `1px solid ${BORDER}`,
     borderRadius: 14,
     padding: 24,
-    textAlign: "center",
+    flex: 1, // Full width now
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
   },
   langFlag: {
     fontSize: 36,
     marginBottom: 10,
   },
   langTitle: {
-    fontSize: 16,
-    fontWeight: 600,
+    fontSize: 18,
+    fontWeight: 700,
     marginBottom: 8,
   },
   langDesc: {
-    fontSize: 13,
+    fontSize: 14,
     color: MUTED,
     lineHeight: 1.6,
     margin: 0,
-  },
-
-  // ── Tech Features ──
-  techFeatures: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    marginTop: 20,
-    paddingTop: 20,
-    borderTop: `1px solid ${BORDER}`,
-  },
-  techFeature: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 12,
-    padding: "10px 14px",
-    background: "rgba(15, 23, 42, 0.5)",
-    borderRadius: 10,
-  },
-  techFeatureIcon: {
-    fontSize: 20,
-    flexShrink: 0,
-    marginTop: 2,
-  },
-  techFeatureTitle: {
-    fontSize: 14,
-    color: TEXT,
-    display: "block",
-    marginBottom: 2,
-  },
-  techFeatureDesc: {
-    fontSize: 13,
-    color: MUTED,
-    margin: 0,
-    lineHeight: 1.4,
   },
 
   // ── Sample Grid ──
@@ -449,6 +454,7 @@ const S: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
     gap: 16,
+    marginTop: 16,
   },
   skeletonCard: {
     background: SURFACE,
@@ -471,19 +477,5 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: 4,
     margin: "12px 14px 0",
     width: "80%",
-  },
-
-  // ── Empty State ──
-  emptyState: {
-    textAlign: "center",
-    padding: "48px 24px",
-    color: MUTED,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 12,
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 12,
   },
 };
