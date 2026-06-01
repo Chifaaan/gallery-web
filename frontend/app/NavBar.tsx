@@ -21,6 +21,14 @@ const IconMoon = () => (
   </svg>
 );
 
+// ─── Camera Icon ──────────────────────────────────────────────
+const IconCamera = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+);
+
 export function NavBar() {
   const { theme, toggleTheme, colors } = useTheme();
 
@@ -28,17 +36,28 @@ export function NavBar() {
     <>
       <style>{`
         .nav-link-warm {
-          color: ${colors.muted};
+          color: ${colors.textSecondary};
           text-decoration: none;
-          font-size: 14px;
+          font-size: 14.5px;
           padding: 8px 16px;
           border-radius: 8px;
           transition: all 0.2s ease;
-          font-weight: 500;
+          font-weight: 600;
         }
         .nav-link-warm:hover {
           color: ${colors.text};
-          background: ${colors.accentBg};
+          background: ${colors.borderLight};
+        }
+        .nav-logo {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          text-decoration: none;
+          color: ${colors.text};
+          transition: transform 0.2s ease;
+        }
+        .nav-logo:hover {
+          transform: scale(1.02);
         }
         .theme-toggle-btn {
           display: flex;
@@ -60,10 +79,9 @@ export function NavBar() {
         }
       `}</style>
       <nav style={{
-        display: "flex",
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
         alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
         padding: "10px 40px",
         background: colors.navBg,
         backdropFilter: "blur(16px)",
@@ -74,37 +92,40 @@ export function NavBar() {
         top: 0,
         zIndex: 50,
       }}>
-        {/* Badge */}
-        <span style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
-          background: colors.accentBg,
-          border: `1px solid ${colors.accentBorder}`,
-          borderRadius: 20,
-          padding: "4px 12px",
-          fontSize: 11,
-          fontWeight: 600,
-          color: colors.accent,
-          marginRight: "auto",
-          letterSpacing: "0.01em",
-        }}>
-          ✨ 100% Real Photos
-        </span>
+        {/* Left: Logo */}
+        <div style={{ display: "flex", justifyContent: "flex-start" }}>
+          <Link 
+            href="/search" 
+            className="nav-logo" 
+            onClick={() => { if (typeof window !== "undefined" && window.location.pathname === "/search") window.dispatchEvent(new CustomEvent("clearSearch")); }}
+          >
+            <IconCamera />
+            <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>LifeGallery</span>
+          </Link>
+        </div>
 
-        {/* Nav Links */}
-        <Link href="/search" className="nav-link-warm">Pencarian</Link>
-        <Link href="/about" className="nav-link-warm">About this Gallery</Link>
+        {/* Center: Nav Links */}
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <Link 
+            href="/search" 
+            className="nav-link-warm"
+            onClick={() => { if (typeof window !== "undefined" && window.location.pathname === "/search") window.dispatchEvent(new CustomEvent("clearSearch")); }}
+          >
+            Pencarian
+          </Link>
+          <Link href="/about" className="nav-link-warm">About this Gallery</Link>
+        </div>
 
-        {/* Theme Toggle */}
-        <button
-          className="theme-toggle-btn"
-          onClick={toggleTheme}
-          title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
-          style={{ marginLeft: "auto" }}
-        >
-          {theme === "light" ? <IconMoon /> : <IconSun />}
-        </button>
+        {/* Right: Theme Toggle */}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            className="theme-toggle-btn"
+            onClick={toggleTheme}
+            title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+          >
+            {theme === "light" ? <IconMoon /> : <IconSun />}
+          </button>
+        </div>
       </nav>
     </>
   );
