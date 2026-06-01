@@ -43,6 +43,11 @@ const IconSettings = () => (
     <circle cx="12" cy="12" r="3" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
   </svg>
 );
+const IconRefresh = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+  </svg>
+);
 
 // ─── Dynamic Placeholder ──────────────────────────────────────
 
@@ -104,6 +109,36 @@ const CHIP_GROUPS: ChipGroup[] = [
       { emoji: "🚗", text: "Aktivitas berkendara", query: "orang berkendara di jalan" },
     ],
   },
+  {
+    label: "Kerja & Belajar",
+    emoji: "💻",
+    chips: [
+      { emoji: "🏢", text: "Orang bekerja di kantor", query: "orang bekerja di kantor" },
+      { emoji: "📚", text: "Membaca buku", query: "orang membaca buku" },
+      { emoji: "🎓", text: "Kegiatan kampus", query: "mahasiswa belajar di kampus" },
+      { emoji: "🤝", text: "Rapat bersama", query: "orang sedang rapat diskusi" },
+    ],
+  },
+  {
+    label: "Liburan & Alam",
+    emoji: "🌲",
+    chips: [
+      { emoji: "🏖️", text: "Bermain di pantai", query: "orang bermain di pantai laut" },
+      { emoji: "⛰️", text: "Mendaki gunung", query: "orang mendaki gunung alam" },
+      { emoji: "🏕️", text: "Berkemah", query: "orang berkemah di hutan" },
+      { emoji: "📷", text: "Fotografi alam", query: "orang memotret pemandangan" },
+    ],
+  },
+  {
+    label: "Kegiatan Sosial",
+    emoji: "🗣️",
+    chips: [
+      { emoji: "🍽️", text: "Makan bersama", query: "orang makan bersama di restoran" },
+      { emoji: "🛍️", text: "Berbelanja", query: "orang berbelanja di pasar" },
+      { emoji: "🎉", text: "Merayakan pesta", query: "orang merayakan pesta" },
+      { emoji: "🐕", text: "Jalan bersama hewan peliharaan", query: "orang membawa anjing jalan-jalan" },
+    ],
+  }
 ];
 
 // ─── Sample Image for Masonry ─────────────────────────────────
@@ -148,6 +183,11 @@ export default function SearchPage() {
 
   // ── Active chip highlight ──
   const [activeChipIdx, setActiveChipIdx] = useState<string | null>(null);
+  const [activeGroupIndex, setActiveGroupIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveGroupIndex(Math.floor(Math.random() * CHIP_GROUPS.length));
+  }, []);
 
   const hasResults = !!results;
 
@@ -329,6 +369,15 @@ export default function SearchPage() {
           transition: all 0.25s ease;
           border: none;
           font-family: 'Inter', 'DM Sans', system-ui, sans-serif;
+        }
+        .refresh-btn-warm {
+          transition: all 0.3s ease;
+        }
+        .refresh-btn-warm:hover {
+          color: ${colors.accent} !important;
+          border-color: ${colors.accentBorder} !important;
+          transform: rotate(180deg);
+          background: ${colors.surfaceHover} !important;
         }
         .mode-tab-warm:hover {
           background: ${colors.accentBg} !important;
@@ -610,8 +659,19 @@ export default function SearchPage() {
             ...S.chipsSection,
             animation: "fadeInUp 0.6s ease 0.15s both",
           }}>
-            {CHIP_GROUPS.map((group) => (
+            {[CHIP_GROUPS[activeGroupIndex]].map((group) => (
               <div key={group.label} style={S.chipGroup}>
+                <div style={S.chipsHeader}>
+                  <span style={S.chipsCta}>✨ Coba ini</span>
+                  <button 
+                    className="refresh-btn-warm"
+                    style={S.chipsRefreshBtn} 
+                    onClick={() => setActiveGroupIndex((prev) => (prev + 1) % CHIP_GROUPS.length)}
+                    title="Tampilkan rekomendasi lain"
+                  >
+                    <IconRefresh />
+                  </button>
+                </div>
                 <div style={S.chipGroupLabel}>
                   <span>{group.emoji}</span>
                   <span>{group.label}</span>
@@ -1230,6 +1290,30 @@ function buildStyles(c: ThemeColors): Record<string, React.CSSProperties> {
       gap: 16,
       marginTop: 4,
       marginBottom: 24,
+    },
+    chipsHeader: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+      marginBottom: 8,
+    },
+    chipsCta: {
+      fontSize: 14,
+      fontWeight: 600,
+      color: c.textSecondary,
+    },
+    chipsRefreshBtn: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: c.surface,
+      border: `1px solid ${c.border}`,
+      color: c.muted,
+      borderRadius: "50%",
+      width: 28,
+      height: 28,
+      cursor: "pointer",
     },
     chipGroup: {
       display: "flex",
