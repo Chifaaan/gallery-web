@@ -457,7 +457,7 @@ export default function SearchPage() {
                       autoFocus
                     />
                     {query && (
-                      <button style={S.clearBtn} onClick={() => setQuery("")}>
+                      <button style={S.clearBtn} onClick={handleClear}>
                         <IconX />
                       </button>
                     )}
