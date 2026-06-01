@@ -250,9 +250,11 @@ function buildStyles(c: ThemeColors): Record<string, React.CSSProperties> {
       fontWeight: 900,
       letterSpacing: "-0.5px",
       marginBottom: 16,
-      background: `linear-gradient(135deg, ${c.text} 0%, ${c.accent} 100%)`,
+      backgroundImage: `linear-gradient(135deg, ${c.text} 0%, ${c.accent} 100%)`,
+      backgroundClip: "text",
       WebkitBackgroundClip: "text",
       WebkitTextFillColor: "transparent",
+      color: "transparent",
       lineHeight: 1.15,
     },
     mainDesc: {
