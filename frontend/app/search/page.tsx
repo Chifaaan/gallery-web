@@ -354,6 +354,7 @@ export default function SearchPage() {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes placeholderFadeIn { from { opacity: 0; } to { opacity: 0.5; } }
         @keyframes placeholderFadeOut { from { opacity: 0.5; } to { opacity: 0; } }
         @keyframes staggerFadeIn {
@@ -911,6 +912,29 @@ function ResultCard({ item, colors, onClick }: { item: SearchResultItem; colors:
 // ─── Detail Modal ─────────────────────────────────────────────
 
 function DetailModal({ item, colors, onClose }: { item: SearchResultItem; colors: ThemeColors; onClose: () => void }) {
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const imgUrl = resolveImageUrl(item.url);
+      const res = await fetch(imgUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = item.image_id || "image.jpg";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Download gagal:", err);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div style={{
       position: "fixed", inset: 0,
@@ -936,7 +960,7 @@ function DetailModal({ item, colors, onClose }: { item: SearchResultItem; colors
           style={{ width: "100%", maxHeight: 380, objectFit: "contain", background: colors.bgAlt }}
         />
         <div style={{ padding: "20px 24px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <span style={{
               background: colors.accentBg,
               border: `1px solid ${colors.accentBorder}`,
@@ -944,6 +968,35 @@ function DetailModal({ item, colors, onClose }: { item: SearchResultItem; colors
               color: colors.accent,
             }}>Skor: {(item.score * 100).toFixed(1)}%</span>
             <span style={{ color: colors.muted, fontSize: 13 }}>Peringkat #{item.rank}</span>
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              style={{
+                marginLeft: "auto",
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: colors.accent, color: "#fff",
+                border: "none", borderRadius: 10, padding: "8px 18px",
+                fontSize: 13, fontWeight: 600, cursor: downloading ? "wait" : "pointer",
+                opacity: downloading ? 0.7 : 1,
+                transition: "all 0.2s ease",
+                boxShadow: `0 2px 8px ${colors.accent}44`,
+              }}
+              onMouseEnter={(e) => { if (!downloading) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = `0 4px 16px ${colors.accent}66`; }}}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = `0 2px 8px ${colors.accent}44`; }}
+            >
+              {downloading ? (
+                <span style={{
+                  width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)",
+                  borderTopColor: "#fff", borderRadius: "50%",
+                  animation: "spin 0.6s linear infinite", display: "inline-block",
+                }} />
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7,10 12,15 17,10" /><line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              )}
+              <span>{downloading ? "Mengunduh..." : "Unduh Gambar"}</span>
+            </button>
           </div>
           {item.captions_id.length > 0 && (
             <>
