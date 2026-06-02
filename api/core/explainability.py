@@ -1,18 +1,17 @@
 """
 core/explainability.py
-Modul analisis explainability untuk memahami MENGAPA model MCLIP memberikan hasil tertentu.
+Modul analisis explainability untuk memahami MENGAPA model CLIP memberikan hasil tertentu.
 
 Tiga jenis analisis:
-1. Attention Weights  — token mana yang paling diperhatikan XLM-RoBERTa text encoder
+1. Attention Weights  — token mana yang paling diperhatikan CLIP text transformer
 2. Token Contribution — kontribusi setiap token terhadap similarity (perturbation-based)
 3. Embedding Dimension — dimensi embedding 512-dim mana yang paling aktif
 
 CATATAN: Modul ini HANYA dipanggil on-demand saat user membuka modal detail,
 BUKAN saat proses pencarian, sehingga tidak mengganggu performa search.
 
-Arsitektur MCLIP text encoding pipeline:
-  Text → XLM-RoBERTa Tokenizer → XLM-RoBERTa Encoder → [CLS] (1024-dim)
-    → linear_transform (1024→512) → adapter.norm → adapter.proj → L2 normalize
+Arsitektur CLIP Vanilla text encoding pipeline:
+  Text → CLIP BPE Tokenizer → CLIP Text Transformer → text_projection → L2 normalize
 """
 
 from __future__ import annotations
@@ -24,6 +23,36 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
+
+
+# ─── Lazy singleton untuk BPE token decoding ───
+_bpe_tokenizer = None
+
+
+def _get_bpe_tokenizer():
+    """Lazy-load SimpleTokenizer untuk decoding token IDs ke string."""
+    global _bpe_tokenizer
+    if _bpe_tokenizer is None:
+        from open_clip.tokenizer import SimpleTokenizer
+        _bpe_tokenizer = SimpleTokenizer()
+    return _bpe_tokenizer
+
+
+def _decode_token_ids(token_ids: list[int], eot_idx: int) -> list[str]:
+    """
+    Decode list of CLIP BPE token IDs menjadi list of token strings.
+    Hanya decode sampai eot_idx (inclusive).
+    """
+    bpe = _get_bpe_tokenizer()
+    result = []
+    for i, tid in enumerate(token_ids):
+        if i > eot_idx:
+            break
+        if tid in bpe.decoder:
+            result.append(bpe.decoder[tid])
+        else:
+            result.append(f"<{tid}>")
+    return result
 
 
 @dataclass
@@ -67,79 +96,27 @@ class ExplainResult:
     elapsed_ms: float = 0.0
 
 
-# ─── XLM-RoBERTa special tokens ───
-SOT_TOKEN = "<s>"
-EOT_TOKEN = "</s>"
-PAD_TOKEN = "<pad>"
-SPECIAL_TOKENS = {SOT_TOKEN, EOT_TOKEN, PAD_TOKEN}
-
-
-def _encode_text_mclip(
-    text: str,
-    xlmr_model,
-    xlmr_tokenizer,
-    linear_transform,
-    adapter,
-    device: str,
-    max_text_length: int = 77,
-) -> torch.Tensor:
-    """
-    Helper: encode teks melalui pipeline MCLIP lengkap.
-    Returns: normalized embedding tensor [1, 512] di device.
-    """
-    inputs = xlmr_tokenizer(
-        text,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=max_text_length,
-    )
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-
-    outputs = xlmr_model(**inputs)
-    cls_emb = outputs.last_hidden_state[:, 0, :]    # [1, 1024]
-    projected = linear_transform(cls_emb)            # [1, 512]
-    adapted = adapter(projected)                     # [1, 512]
-    return F.normalize(adapted.float(), dim=-1)      # [1, 512]
-
-
-def _encode_tokens_mclip(
-    input_ids: torch.Tensor,
-    attention_mask: torch.Tensor,
-    xlmr_model,
-    linear_transform,
-    adapter,
-) -> torch.Tensor:
-    """
-    Helper: encode pre-tokenized input melalui pipeline MCLIP lengkap.
-    Digunakan untuk perturbation analysis.
-    Returns: normalized embedding tensor [1, 512] di device.
-    """
-    outputs = xlmr_model(input_ids=input_ids, attention_mask=attention_mask)
-    cls_emb = outputs.last_hidden_state[:, 0, :]    # [1, 1024]
-    projected = linear_transform(cls_emb)            # [1, 512]
-    adapted = adapter(projected)                     # [1, 512]
-    return F.normalize(adapted.float(), dim=-1)      # [1, 512]
+# ─── CLIP special token IDs ───
+SOT_TOKEN = "<|startoftext|>"
+EOT_TOKEN = "<|endoftext|>"
+SPECIAL_TOKENS = {SOT_TOKEN, EOT_TOKEN}
 
 
 class ExplainabilityAnalyzer:
     """
     Menganalisis pasangan (query_text, image_embedding) untuk menghasilkan
-    visualisasi explainability. Stateless — menerima model components
+    visualisasi explainability. Stateless — menerima model & tokenizer
     dari SearchEngine.
     """
 
     def analyze(
         self,
         query_text: str,
-        image_embedding: np.ndarray,           # [512] — satu baris dari image_index
-        xlmr_model,                            # XLMRobertaModel
-        xlmr_tokenizer,                        # XLMRobertaTokenizer
-        linear_transform,                      # nn.Linear(1024, 512)
-        adapter,                               # MCLIPAdapter
+        image_embedding: np.ndarray,       # [512] — satu baris dari image_index
+        model,                              # open_clip CLIP model
+        tokenizer,                          # open_clip tokenizer (callable)
         device: str,
-        analyses: list[str] | None = None,     # subset of ["attention", "token_contribution", "embedding"]
-        max_text_length: int = 77,
+        analyses: list[str] | None = None,  # subset of ["attention", "token_contribution", "embedding"]
     ) -> ExplainResult:
         """
         Jalankan analisis yang diminta. Default: semua 3 analisis.
@@ -150,23 +127,15 @@ class ExplainabilityAnalyzer:
         t0 = time.perf_counter()
         result = ExplainResult()
 
-        # Tokenisasi query menggunakan XLM-RoBERTa tokenizer
-        inputs = xlmr_tokenizer(
-            query_text,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=max_text_length,
-        )
-        input_ids = inputs["input_ids"].to(device)          # [1, seq_len]
-        attention_mask = inputs["attention_mask"].to(device) # [1, seq_len]
+        # Tokenisasi query menggunakan CLIP tokenizer
+        tokens = tokenizer(query_text).to(device)       # [1, 77]
+
+        # Posisi EOT token (token dengan ID tertinggi = 49407)
+        eot_idx = tokens[0].argmax().item()
 
         # Decode token strings untuk display
-        token_ids_list = input_ids[0].tolist()
-        token_strings = xlmr_tokenizer.convert_ids_to_tokens(token_ids_list)
-
-        # Temukan posisi token non-padding terakhir
-        seq_len = attention_mask[0].sum().item()
+        token_ids_list = tokens[0].tolist()
+        token_strings = _decode_token_ids(token_ids_list, eot_idx)
 
         # Image embedding sebagai tensor
         img_emb_t = torch.tensor(image_embedding, dtype=torch.float32).to(device)  # [512]
@@ -176,23 +145,19 @@ class ExplainabilityAnalyzer:
         # ── 1. Attention Weights ──
         if "attention" in analyses:
             result.attention_weights = self._analyze_attention(
-                xlmr_model, input_ids, attention_mask,
-                token_strings, seq_len, device
+                model, tokens, token_strings, eot_idx, device
             )
 
         # ── 2. Token Contribution (perturbation-based) ──
         if "token_contribution" in analyses:
             result.token_contributions = self._analyze_token_contribution(
-                xlmr_model, linear_transform, adapter,
-                input_ids, attention_mask,
-                token_strings, img_emb_t, seq_len, device,
+                model, tokens, token_strings, img_emb_t, eot_idx, device,
             )
 
         # ── 3. Embedding Dimension Analysis ──
         if "embedding" in analyses:
             dims, stats = self._analyze_embedding_dimensions(
-                xlmr_model, linear_transform, adapter,
-                input_ids, attention_mask, img_emb_t,
+                model, tokens, img_emb_t
             )
             result.embedding_dimensions = dims
             result.embedding_stats = stats
@@ -204,90 +169,90 @@ class ExplainabilityAnalyzer:
 
     def _analyze_attention(
         self,
-        xlmr_model,
-        input_ids: torch.Tensor,         # [1, seq_len]
-        attention_mask: torch.Tensor,     # [1, seq_len]
+        model,
+        tokens: torch.Tensor,        # [1, 77]
         token_strings: list[str],
-        seq_len: int,
+        eot_idx: int,
         device: str,
     ) -> list[AttentionToken]:
         """
-        Ekstrak attention weights dari XLM-RoBERTa layer terakhir.
-        Rata-ratakan semua heads, ambil attention FROM [CLS] token (posisi 0) TO setiap token.
-        ([CLS] di XLM-RoBERTa adalah representasi utama teks, analog EOT di CLIP.)
+        Ekstrak attention weights dari CLIP text transformer layer terakhir.
+        Rata-ratakan semua heads, ambil attention FROM EOT token TO setiap token.
+        (EOT di CLIP setara dengan [CLS] di BERT — representasi utama teks.)
         """
         with torch.no_grad():
-            outputs = xlmr_model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                output_attentions=True,
+            # Manual forward pass melalui text encoder
+            x = model.token_embedding(tokens).float()       # [1, 77, 512]
+            x = x + model.positional_embedding[:x.shape[1]].float()
+            x = x.permute(1, 0, 2)  # [77, 1, 512] — LND format
+
+            # Attention mask (causal)
+            attn_mask = model.attn_mask
+            if attn_mask is not None:
+                attn_mask = attn_mask[:x.shape[0], :x.shape[0]].to(device)
+
+            # Forward melalui semua resblocks kecuali yang terakhir
+            for block in model.transformer.resblocks[:-1]:
+                x = block(x, attn_mask=attn_mask)
+
+            # Last resblock: extract attention weights
+            last_block = model.transformer.resblocks[-1]
+            x_ln = last_block.ln_1(x)
+            _, attn_weights = last_block.attn(
+                x_ln, x_ln, x_ln,
+                need_weights=True,
+                attn_mask=attn_mask,
             )
+            # attn_weights: [1, tgt_len, src_len] (averaged over heads)
 
-        # Ambil attention dari layer terakhir
-        # attentions[-1] shape: [batch, num_heads, seq_len, seq_len]
-        last_layer_attn = outputs.attentions[-1]          # [1, 16, seq_len, seq_len]
+        # Attention dari EOT ke semua token
+        eot_attention = attn_weights[0, eot_idx, :].cpu().numpy()   # [seq_len]
 
-        # Rata-rata semua heads
-        avg_attn = last_layer_attn[0].mean(dim=0)         # [seq_len, seq_len]
+        # Mask: hanya token sampai EOT (non-padding)
+        mask = np.zeros(len(eot_attention))
+        for i in range(eot_idx + 1):
+            mask[i] = 1.0
 
-        # Attention dari [CLS] (posisi 0) ke semua token
-        cls_attention = avg_attn[0, :].cpu().numpy()      # [seq_len]
-
-        # Mask: hanya token non-padding
-        mask = attention_mask[0].cpu().numpy().astype(float)
-        cls_attention = cls_attention * mask
+        eot_attention = eot_attention * mask
 
         # Normalize
-        total = cls_attention.sum()
+        total = eot_attention.sum()
         if total > 0:
-            cls_attention = cls_attention / total
+            eot_attention = eot_attention / total
 
         return [
             AttentionToken(
                 token=tok,
-                weight=round(float(cls_attention[i]), 6),
+                weight=round(float(eot_attention[i]), 6),
                 is_special=tok in SPECIAL_TOKENS,
             )
             for i, tok in enumerate(token_strings)
-            if i < seq_len  # Hanya token non-padding
         ]
 
     # ─── Token Contribution (Perturbation) ────────────────────────
 
     def _analyze_token_contribution(
         self,
-        xlmr_model,
-        linear_transform,
-        adapter,
-        input_ids: torch.Tensor,         # [1, seq_len]
-        attention_mask: torch.Tensor,     # [1, seq_len]
+        model,
+        tokens: torch.Tensor,        # [1, 77]
         token_strings: list[str],
-        img_emb: torch.Tensor,           # [1, 512]
-        seq_len: int,
+        img_emb: torch.Tensor,       # [1, 512]
+        eot_idx: int,
         device: str,
     ) -> list[TokenContrib]:
         """
-        Perturbation-based: mask satu token pada satu waktu
-        (ganti dengan padding token ID), hitung ulang text embedding via
-        MCLIP pipeline, bandingkan similarity.
+        Perturbation-based: mask satu token pada satu waktu (ganti dengan padding 0),
+        hitung ulang text embedding, bandingkan similarity.
         Kontribusi = original_score - perturbed_score.
         """
         # Original similarity
         with torch.no_grad():
-            orig_emb = _encode_tokens_mclip(
-                input_ids, attention_mask,
-                xlmr_model, linear_transform, adapter,
-            )
+            orig_emb = model.encode_text(tokens, normalize=True).float()
             orig_score = F.cosine_similarity(orig_emb, img_emb, dim=1).item()
-
-        # Pad token ID untuk masking
-        pad_token_id = 1  # XLM-RoBERTa pad token ID
 
         results = []
 
-        for i in range(seq_len):
-            tok = token_strings[i]
-
+        for i, tok in enumerate(token_strings):
             if tok in SPECIAL_TOKENS:
                 results.append(TokenContrib(
                     token=tok,
@@ -297,19 +262,12 @@ class ExplainabilityAnalyzer:
                 ))
                 continue
 
-            # Mask token i dengan pad token
-            perturbed_ids = input_ids.clone()
-            perturbed_ids[0, i] = pad_token_id
-
-            # Juga update attention mask untuk masked token
-            perturbed_mask = attention_mask.clone()
-            perturbed_mask[0, i] = 0
+            # Mask token i dengan 0 (padding)
+            perturbed = tokens.clone()
+            perturbed[0, i] = 0
 
             with torch.no_grad():
-                pert_emb = _encode_tokens_mclip(
-                    perturbed_ids, perturbed_mask,
-                    xlmr_model, linear_transform, adapter,
-                )
+                pert_emb = model.encode_text(perturbed, normalize=True).float()
                 pert_score = F.cosine_similarity(pert_emb, img_emb, dim=1).item()
 
             contrib = orig_score - pert_score  # positif = token membantu
@@ -327,12 +285,9 @@ class ExplainabilityAnalyzer:
 
     def _analyze_embedding_dimensions(
         self,
-        xlmr_model,
-        linear_transform,
-        adapter,
-        input_ids: torch.Tensor,         # [1, seq_len]
-        attention_mask: torch.Tensor,     # [1, seq_len]
-        img_emb: torch.Tensor,           # [1, 512]
+        model,
+        tokens: torch.Tensor,        # [1, 77]
+        img_emb: torch.Tensor,       # [1, 512]
         top_n: int = 30,
     ) -> tuple[list[EmbeddingDim], EmbeddingStats]:
         """
@@ -341,10 +296,7 @@ class ExplainabilityAnalyzer:
         (karena cosine similarity = dot product pada normalized vectors)
         """
         with torch.no_grad():
-            text_emb = _encode_tokens_mclip(
-                input_ids, attention_mask,
-                xlmr_model, linear_transform, adapter,
-            )  # [1, 512]
+            text_emb = model.encode_text(tokens, normalize=True).float()  # [1, 512]
 
         text_np = text_emb[0].cpu().numpy()   # [512]
         img_np = img_emb[0].cpu().numpy()     # [512]

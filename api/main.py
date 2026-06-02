@@ -1,6 +1,6 @@
 """
 CLIP Indonesia Search API
-FastAPI server untuk pencarian gambar berbasis MCLIP (CLIP + XLM-RoBERTa)
+FastAPI server untuk pencarian gambar berbasis CLIP Vanilla (Fine-tuned)
 """
 
 from fastapi import FastAPI
@@ -17,7 +17,7 @@ from routers import search, index_management, health, explainability, feedback
 # ─── Lifespan: load model saat startup, cleanup saat shutdown ───
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Starting MCLIP Indonesia Search API...")
+    print("🚀 Starting CLIP Indonesia Search API...")
     app.state.engine = SearchEngine(
         export_dir=os.getenv("MODEL_DIR", "./exported_model"),
         device=os.getenv("DEVICE", "auto"),
@@ -35,9 +35,9 @@ async def lifespan(app: FastAPI):
 
 # ─── App ───
 app = FastAPI(
-    title="MCLIP Indonesia Search API",
-    description="API pencarian gambar menggunakan MCLIP (CLIP ViT-B/32 + XLM-RoBERTa-Large)",
-    version="3.0.0",
+    title="CLIP Indonesia Search API",
+    description="API pencarian gambar menggunakan CLIP Vanilla (ViT-B/32, Fine-tuned)",
+    version="4.0.0",
     lifespan=lifespan,
 )
 

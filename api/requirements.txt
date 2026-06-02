@@ -10,8 +10,5 @@ open-clip-torch
 numpy
 Pillow
 
-transformers>=4.40.0
-sentencepiece>=0.2.0
-
 python-dotenv==1.0.1
 aiosqlite==0.20.0
