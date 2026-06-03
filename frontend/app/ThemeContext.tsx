@@ -153,13 +153,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const colors = theme === "light" ? LIGHT : DARK;
 
+  // Prevent hydration mismatch: render nothing until client has
+  // read the stored theme from localStorage. Both server and client
+  // first render will produce the same empty output.
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, colors }}>
-      {mounted ? children : (
-        <div style={{ visibility: "hidden" }}>
-          {children}
-        </div>
-      )}
+      {children}
     </ThemeContext.Provider>
   );
 }

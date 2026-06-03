@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id">
+    <html lang="id" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           @keyframes spin { to { transform: rotate(360deg); } }
         `}</style>
       </head>
-      <body style={{ fontFamily: "'Inter', 'DM Sans', system-ui, sans-serif" }}>
+      <body suppressHydrationWarning style={{ fontFamily: "'Inter', 'DM Sans', system-ui, sans-serif" }}>
         <ThemeProvider>
           <NavBar />
           {children}
