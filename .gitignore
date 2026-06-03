@@ -14,8 +14,12 @@
 **.next
 **/exported_model_IndoBERT_8K/
 **/exported_model_IndoBERT_Tuned/
-**/exported_model/
 **/exported_model_mclip/
+**/exported_model_old/
 **/exported_model_clip_old/
 **/exported_model_clip/
+**/images_8k/
+**/images_full/
+**images_old/
+
 __pycache__/
