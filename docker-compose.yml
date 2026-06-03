@@ -28,8 +28,8 @@ services:
     volumes:
       # Model files — mount dari host agar tidak masuk image
       - ./api/exported_model:/app/exported_model:ro
-      # Storage — persistent volume untuk uploaded images
-      - api-storage:/app/storage
+      # Storage — bind mount agar gambar dari host langsung tersedia
+      - ./api/storage:/app/storage
       # SQLite database — persistent volume untuk feedback
       - api-data:/app/data
     networks:
@@ -70,8 +70,6 @@ services:
 
 # ── Volumes ────────────────────────────────────────────────────
 volumes:
-  api-storage:
-    driver: local
   api-data:
     driver: local
 
