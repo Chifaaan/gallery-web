@@ -62,11 +62,12 @@ const PLACEHOLDERS = [
   "Cari: Petani menanam padi di sawah...",
 ];
 
-function useDynamicPlaceholder() {
+function useDynamicPlaceholder(paused: boolean) {
   const [index, setIndex] = useState(0);
   const [fade, setFade] = useState(true);
 
   useEffect(() => {
+    if (paused) return;
     const timer = setInterval(() => {
       setFade(false);
       setTimeout(() => {
@@ -75,7 +76,7 @@ function useDynamicPlaceholder() {
       }, 300);
     }, 3500);
     return () => clearInterval(timer);
-  }, []);
+  }, [paused]);
 
   return { placeholder: PLACEHOLDERS[index], fade };
 }
@@ -166,7 +167,7 @@ export default function SearchPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { placeholder, fade } = useDynamicPlaceholder();
+  const { placeholder, fade } = useDynamicPlaceholder(query.length > 0);
 
   // ── Settings popover ──
   const [showSettings, setShowSettings] = useState(false);
