@@ -148,7 +148,7 @@ export default function AboutPage() {
               <div style={S.pipelineIconBg}><span style={S.pipelineEmoji}>🧠</span></div>
               <div style={S.pipelineContent}>
                 <h3 style={S.pipelineTitle}>AI Memahami</h3>
-                <p style={S.pipelineDesc}>Model XLM-RoBERTa <strong>membaca dan memahami konteks</strong> kalimat Anda secara mendalam.</p>
+                <p style={S.pipelineDesc}>Model CLIP vanilla yang di-fine-tune <strong>membaca dan memahami konteks</strong> kalimat Anda secara mendalam.</p>
               </div>
             </div>
 
