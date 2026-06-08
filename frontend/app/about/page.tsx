@@ -63,21 +63,108 @@ export default function AboutPage() {
         
         .guide-card { transition: all 0.25s ease; }
         .guide-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px ${colors.cardShadow}; }
+
+        /* ── Mobile Responsive ── */
+        @media (max-width: 768px) {
+          .about-main {
+            padding: 24px 14px !important;
+          }
+          .about-main-title {
+            font-size: 26px !important;
+          }
+          .about-main-desc {
+            font-size: 15px !important;
+          }
+          .about-masonry-grid {
+            column-count: 2 !important;
+            column-gap: 10px !important;
+            padding: 4px !important;
+          }
+          .about-tech-section {
+            padding: 40px 16px !important;
+          }
+          .about-tech-title {
+            font-size: 1.5rem !important;
+          }
+          .about-tech-desc {
+            font-size: 0.95rem !important;
+          }
+          .about-pipeline-step {
+            gap: 16px !important;
+            margin-bottom: 24px !important;
+          }
+          .about-pipeline-icon {
+            width: 44px !important;
+            height: 44px !important;
+            min-width: 44px !important;
+          }
+          .about-pipeline-emoji {
+            font-size: 20px !important;
+          }
+          .about-pipeline-content {
+            padding: 16px !important;
+          }
+          .about-pipeline-title {
+            font-size: 16px !important;
+          }
+          .about-pipeline-desc {
+            font-size: 14px !important;
+          }
+          .about-timeline-line {
+            left: 22px !important;
+            top: 22px !important;
+            bottom: 22px !important;
+          }
+          .about-guide-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .about-guide-card {
+            padding: 24px !important;
+          }
+          .about-guide-card-title {
+            font-size: 17px !important;
+          }
+          .about-guide-list-item {
+            font-size: 14px !important;
+          }
+          .about-section {
+            margin-bottom: 48px !important;
+          }
+          .about-text-center {
+            margin-bottom: 24px !important;
+          }
+          .about-id-badge {
+            padding: 8px 16px !important;
+            font-size: 13px !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .about-main-title {
+            font-size: 22px !important;
+          }
+          .about-masonry-grid {
+            column-count: 2 !important;
+          }
+          .about-tech-title {
+            font-size: 1.25rem !important;
+          }
+        }
       `}</style>
 
-      <main style={S.main}>
+      <main className="about-main" style={S.main}>
 
         {/* ── SECTION 1: KONTEN GALERI ── */}
-        <section style={{ ...S.section, animation: "fadeInUp 0.6s ease forwards" }}>
-          <div style={S.textCenter}>
-            <h1 style={S.mainTitle}>30.000 Momen Nyata Kehidupan Manusia</h1>
-            <p style={S.mainDesc}>
+        <section className="about-section" style={{ ...S.section, animation: "fadeInUp 0.6s ease forwards" }}>
+          <div className="about-text-center" style={S.textCenter}>
+            <h1 className="about-main-title" style={S.mainTitle}>30.000 Momen Nyata Kehidupan Manusia</h1>
+            <p className="about-main-desc" style={S.mainDesc}>
               Galeri ini diisi oleh foto-foto autentik dari platform Flickr, menangkap ribuan aktivitas, interaksi, dan rutinitas sehari-hari manusia dari seluruh dunia.
             </p>
           </div>
 
           {samplesLoaded && sampleImages.length > 0 && (
-            <div style={S.masonryGrid}>
+            <div className="about-masonry-grid" style={S.masonryGrid}>
               {sampleImages.map((img, i) => (
                 <div
                   key={img.image_id}
@@ -100,23 +187,23 @@ export default function AboutPage() {
         </section>
 
         {/* ── SECTION 2: TEKNOLOGI ── */}
-        <section style={{
+        <section className="about-tech-section" style={{
           padding: "80px 24px",
           maxWidth: "800px",
           margin: "0 auto",
           animation: "fadeInUp 0.6s ease 0.2s both"
         }}>
           <div style={{ textAlign: "center", marginBottom: "60px" }}>
-            <h2 style={{
+            <h2 className="about-tech-title" style={{
               fontSize: "2.25rem",
               fontWeight: "800",
-              color: "#1F2937", /* Charcoal hangat */
+              color: colors.text,
               marginBottom: "12px",
               lineHeight: 1.2
             }}>
               Dipahami oleh AI, Bukan Sekadar Dicari Kata Per Kata
             </h2>
-            <p style={{ fontSize: "1.1rem", color: "#6B7280", maxWidth: "600px", margin: "0 auto" }}>
+            <p className="about-tech-desc" style={{ fontSize: "1.1rem", color: colors.muted, maxWidth: "600px", margin: "0 auto" }}>
               Ikuti perjalanan pencarian Anda dari kata-kata menjadi gambar dalam hitungan milidetik.
             </p>
           </div>
@@ -124,58 +211,58 @@ export default function AboutPage() {
           <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: "0" }}>
 
             {/* Garis Penghubung Vertikal Utama (Di belakang kartu) */}
-            <div style={{
+            <div className="about-timeline-line" style={{
               position: "absolute",
-              left: "28px", // Posisi tengah ikon (Ukuran ikon 56px / 2 = 28px)
+              left: "28px",
               top: "28px",
               bottom: "28px",
               width: "2px",
-              background: "linear-gradient(to bottom, #E5E7EB, #D1D5DB, #E5E7EB)", // Abu-abu lembut
+              background: `linear-gradient(to bottom, ${colors.border}, ${colors.borderLight}, ${colors.border})`,
               zIndex: 0
             }}></div>
 
             {/* Step 1 */}
-            <div style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
-              <div style={S.pipelineIconBg}><span style={S.pipelineEmoji}>⌨️</span></div>
-              <div style={S.pipelineContent}>
-                <h3 style={S.pipelineTitle}>Anda Mengetik</h3>
-                <p style={S.pipelineDesc}>Masukkan deskripsi dalam Bahasa Indonesia, misal <strong>"Seorang pria bermain gitar"</strong>.</p>
+            <div className="about-pipeline-step" style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
+              <div className="about-pipeline-icon" style={S.pipelineIconBg}><span className="about-pipeline-emoji" style={S.pipelineEmoji}>⌨️</span></div>
+              <div className="about-pipeline-content" style={S.pipelineContent}>
+                <h3 className="about-pipeline-title" style={S.pipelineTitle}>Anda Mengetik</h3>
+                <p className="about-pipeline-desc" style={S.pipelineDesc}>Masukkan deskripsi dalam Bahasa Indonesia, misal <strong>"Seorang pria bermain gitar"</strong>.</p>
               </div>
             </div>
 
             {/* Step 2 */}
-            <div style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
-              <div style={S.pipelineIconBg}><span style={S.pipelineEmoji}>🧠</span></div>
-              <div style={S.pipelineContent}>
-                <h3 style={S.pipelineTitle}>AI Memahami</h3>
-                <p style={S.pipelineDesc}>Model CLIP vanilla yang di-fine-tune <strong>membaca dan memahami konteks</strong> kalimat Anda secara mendalam.</p>
+            <div className="about-pipeline-step" style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
+              <div className="about-pipeline-icon" style={S.pipelineIconBg}><span className="about-pipeline-emoji" style={S.pipelineEmoji}>🧠</span></div>
+              <div className="about-pipeline-content" style={S.pipelineContent}>
+                <h3 className="about-pipeline-title" style={S.pipelineTitle}>AI Memahami</h3>
+                <p className="about-pipeline-desc" style={S.pipelineDesc}>Model CLIP vanilla yang di-fine-tune <strong>membaca dan memahami konteks</strong> kalimat Anda secara mendalam.</p>
               </div>
             </div>
 
             {/* Step 3 */}
-            <div style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
-              <div style={S.pipelineIconBg}><span style={S.pipelineEmoji}>🎯</span></div>
-              <div style={S.pipelineContent}>
-                <h3 style={S.pipelineTitle}>Sidik Jari Makna</h3>
-                <p style={S.pipelineDesc}>Teks Anda diterjemahkan menjadi <strong>representasi makna unik</strong> (seperti koordinat peta), bukan sekadar kata per kata.</p>
+            <div className="about-pipeline-step" style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
+              <div className="about-pipeline-icon" style={S.pipelineIconBg}><span className="about-pipeline-emoji" style={S.pipelineEmoji}>🎯</span></div>
+              <div className="about-pipeline-content" style={S.pipelineContent}>
+                <h3 className="about-pipeline-title" style={S.pipelineTitle}>Sidik Jari Makna</h3>
+                <p className="about-pipeline-desc" style={S.pipelineDesc}>Teks Anda diterjemahkan menjadi <strong>representasi makna unik</strong> (seperti koordinat peta), bukan sekadar kata per kata.</p>
               </div>
             </div>
 
             {/* Step 4 */}
-            <div style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
-              <div style={S.pipelineIconBg}><span style={S.pipelineEmoji}>🔍</span></div>
-              <div style={S.pipelineContent}>
-                <h3 style={S.pipelineTitle}>Pencocokan Visual</h3>
-                <p style={S.pipelineDesc}>Sistem mencari foto di galeri yang memiliki <strong>"sidik jari makna" paling selaras</strong> dengan teks Anda.</p>
+            <div className="about-pipeline-step" style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
+              <div className="about-pipeline-icon" style={S.pipelineIconBg}><span className="about-pipeline-emoji" style={S.pipelineEmoji}>🔍</span></div>
+              <div className="about-pipeline-content" style={S.pipelineContent}>
+                <h3 className="about-pipeline-title" style={S.pipelineTitle}>Pencocokan Visual</h3>
+                <p className="about-pipeline-desc" style={S.pipelineDesc}>Sistem mencari foto di galeri yang memiliki <strong>"sidik jari makna" paling selaras</strong> dengan teks Anda.</p>
               </div>
             </div>
 
             {/* Step 5 */}
-            <div style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
-              <div style={S.pipelineIconBg}><span style={S.pipelineEmoji}>⚡</span></div>
-              <div style={S.pipelineContent}>
-                <h3 style={S.pipelineTitle}>Hasil Instan</h3>
-                <p style={S.pipelineDesc}>Foto yang paling relevan ditemukan dalam hitungan <strong>milidetik!</strong></p>
+            <div className="about-pipeline-step" style={{ ...S.pipelineStep, position: "relative", zIndex: 1 }}>
+              <div className="about-pipeline-icon" style={S.pipelineIconBg}><span className="about-pipeline-emoji" style={S.pipelineEmoji}>⚡</span></div>
+              <div className="about-pipeline-content" style={S.pipelineContent}>
+                <h3 className="about-pipeline-title" style={S.pipelineTitle}>Hasil Instan</h3>
+                <p className="about-pipeline-desc" style={S.pipelineDesc}>Foto yang paling relevan ditemukan dalam hitungan <strong>milidetik!</strong></p>
               </div>
             </div>
 
@@ -183,35 +270,35 @@ export default function AboutPage() {
         </section>
 
         {/* ── SECTION 3: PANDUAN PENCARIAN ── */}
-        <section style={{ ...S.section, animation: "fadeInUp 0.6s ease 0.4s both", paddingBottom: "60px" }}>
-          <div style={S.textCenter}>
-            <h2 style={{ ...S.mainTitle, fontSize: 32 }}>Tips Mencari yang Tepat</h2>
+        <section className="about-section" style={{ ...S.section, animation: "fadeInUp 0.6s ease 0.4s both", paddingBottom: "60px" }}>
+          <div className="about-text-center" style={S.textCenter}>
+            <h2 className="about-main-title" style={{ ...S.mainTitle, fontSize: 32 }}>Tips Mencari yang Tepat</h2>
           </div>
 
-          <div style={S.guideGrid}>
+          <div className="about-guide-grid" style={S.guideGrid}>
             {/* Card Cocok */}
-            <div className="guide-card" style={S.guideCardSuccess}>
-              <h3 style={S.guideCardTitleSuccess}>✅ Cocok Dicari</h3>
+            <div className="guide-card about-guide-card" style={S.guideCardSuccess}>
+              <h3 className="about-guide-card-title" style={S.guideCardTitleSuccess}>✅ Cocok Dicari</h3>
               <ul style={S.guideList}>
-                <li style={S.guideListItem}><strong>Aktivitas manusia</strong> (cth: "orang sedang memasak")</li>
-                <li style={S.guideListItem}><strong>Suasana / setting</strong> (cth: "pemandangan kota saat hujan")</li>
-                <li style={S.guideListItem}><strong>Obyek umum</strong> (cth: "kucing hitam di atas meja")</li>
+                <li className="about-guide-list-item" style={S.guideListItem}><strong>Aktivitas manusia</strong> (cth: "orang sedang memasak")</li>
+                <li className="about-guide-list-item" style={S.guideListItem}><strong>Suasana / setting</strong> (cth: "pemandangan kota saat hujan")</li>
+                <li className="about-guide-list-item" style={S.guideListItem}><strong>Obyek umum</strong> (cth: "kucing hitam di atas meja")</li>
               </ul>
             </div>
 
             {/* Card Kurang Tepat */}
-            <div className="guide-card" style={S.guideCardError}>
-              <h3 style={S.guideCardTitleError}>❌ Kurang Tepat Dicari</h3>
+            <div className="guide-card about-guide-card" style={S.guideCardError}>
+              <h3 className="about-guide-card-title" style={S.guideCardTitleError}>❌ Kurang Tepat Dicari</h3>
               <ul style={S.guideList}>
-                <li style={S.guideListItem}><strong>Nama orang spesifik</strong> (cth: "Joko Widodo")</li>
-                <li style={S.guideListItem}><strong>Landmark spesifik</strong> (cth: "Candi Borobudur")</li>
-                <li style={S.guideListItem}><strong>Teks tidak bermakna</strong> (cth: "asdfghjkl")</li>
+                <li className="about-guide-list-item" style={S.guideListItem}><strong>Nama orang spesifik</strong> (cth: "Joko Widodo")</li>
+                <li className="about-guide-list-item" style={S.guideListItem}><strong>Landmark spesifik</strong> (cth: "Candi Borobudur")</li>
+                <li className="about-guide-list-item" style={S.guideListItem}><strong>Teks tidak bermakna</strong> (cth: "asdfghjkl")</li>
               </ul>
             </div>
           </div>
 
           <div style={S.badgeWrapper}>
-            <span style={S.idBadge}>
+            <span className="about-id-badge" style={S.idBadge}>
               🇮🇩 Dioptimalkan untuk Pencarian Bahasa Indonesia
             </span>
           </div>
@@ -283,28 +370,28 @@ function buildStyles(c: ThemeColors): Record<string, React.CSSProperties> {
       display: "block",
     },
 
-    // ── Pipeline (UPDATED: Vertical Timeline) ──
+    // ── Pipeline (Vertical Timeline) ──
     pipelineContainer: {
       position: "relative",
       display: "flex",
-      flexDirection: "column", // Diubah ke vertikal
+      flexDirection: "column",
       gap: 0,
-      maxWidth: 800, // Batasi lebar agar mudah dibaca
+      maxWidth: 800,
       margin: "0 auto",
     },
     pipelineStep: {
       display: "flex",
-      alignItems: "flex-start", // Ikon dan teks sejajar atas
+      alignItems: "flex-start",
       gap: "24px",
       marginBottom: "32px",
       position: "relative",
-      zIndex: 1, // Di atas garis timeline
+      zIndex: 1,
     },
     pipelineIconBg: {
       width: 56,
       height: 56,
-      minWidth: 56, // Cegah menyusut
-      borderRadius: "50%", // Diubah jadi lingkaran
+      minWidth: 56,
+      borderRadius: "50%",
       background: c.surface,
       border: `2px solid ${c.border}`,
       boxShadow: `0 4px 6px -1px ${c.cardShadow}`,
@@ -312,20 +399,20 @@ function buildStyles(c: ThemeColors): Record<string, React.CSSProperties> {
       alignItems: "center",
       justifyContent: "center",
       position: "relative",
-      zIndex: 2, // Pastikan di atas garis timeline
-      transition: "all 0.25s ease", // Untuk efek hover ikon
+      zIndex: 2,
+      transition: "all 0.25s ease",
     },
     pipelineEmoji: {
-      fontSize: 24, // Sesuaikan ukuran emoji
+      fontSize: 24,
     },
-    pipelineContent: { // BARU: Wrapper untuk kartu teks
+    pipelineContent: {
       background: c.surface,
       border: `1px solid ${c.borderLight}`,
       borderRadius: 16,
       padding: "20px 24px",
       boxShadow: `0 2px 4px ${c.cardShadow}`,
       width: "100%",
-      textAlign: "left", // Teks rata kiri
+      textAlign: "left",
     },
     pipelineTitle: {
       fontSize: 18,
@@ -340,18 +427,18 @@ function buildStyles(c: ThemeColors): Record<string, React.CSSProperties> {
       lineHeight: 1.6,
       margin: 0,
     },
-    pipelineConnector: { // Tidak dipakai lagi di JSX, tapi disimpan agar tidak error
+    pipelineConnector: {
       display: "none",
     },
-    abstractVisual: { // Posisi untuk SVG embedding di tengah timeline
+    abstractVisual: {
       position: "relative",
       zIndex: 1,
       height: 80,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      marginLeft: "8px", // Sedikit masuk ke tengah untuk efek menyatu
-      marginBottom: "32px", // Sama dengan jarak step
+      marginLeft: "8px",
+      marginBottom: "32px",
     },
 
     // ── Guide Cards ──

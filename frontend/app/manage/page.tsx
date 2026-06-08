@@ -30,20 +30,67 @@ export default function ManagePage() {
 
   return (
     <div style={S.page}>
-      <header style={S.header}>
-        <h1 style={S.h1}>Manajemen Index</h1>
+      <style>{`
+        /* ── Mobile Responsive for Manage Page ── */
+        @media (max-width: 768px) {
+          .manage-header {
+            padding: 20px 16px 16px !important;
+          }
+          .manage-layout {
+            grid-template-columns: 1fr !important;
+            padding: 16px !important;
+            gap: 16px !important;
+          }
+          .manage-image-grid {
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important;
+          }
+          .manage-stat-grid {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          .manage-list-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
+          }
+          .manage-list-card {
+            padding: 16px !important;
+          }
+          .manage-stats-card {
+            padding: 16px !important;
+          }
+          .manage-pagination {
+            flex-wrap: wrap !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .manage-image-grid {
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+          }
+          .manage-h1 {
+            font-size: 20px !important;
+          }
+        }
+        
+        .imageItem:hover .imageOverlay {
+          opacity: 1 !important;
+        }
+      `}</style>
+
+      <header className="manage-header" style={S.header}>
+        <h1 className="manage-h1" style={S.h1}>Manajemen Index</h1>
         <p style={S.subtitle}>Lihat dan kelola gambar dalam search index</p>
       </header>
 
-      <div style={S.layout}>
+      <div className="manage-layout" style={S.layout}>
         {/* ── Left: Stats ── */}
         <div style={S.leftCol}>
 
           {/* Stats */}
           {stats && (
-            <div style={S.statsCard}>
+            <div className="manage-stats-card" style={S.statsCard}>
               <h3 style={S.cardTitle}>Statistik Index</h3>
-              <div style={S.statGrid}>
+              <div className="manage-stat-grid" style={S.statGrid}>
                 <Stat label="Total Gambar" value={stats.total_images.toLocaleString()} />
                 <Stat label="Dimensi" value={`${stats.index_shape[1] ?? "—"}d`} />
                 <Stat label="Device" value={stats.device.toUpperCase()} accent />
@@ -59,8 +106,8 @@ export default function ManagePage() {
 
         {/* ── Right: Image List ── */}
         <div style={S.rightCol}>
-          <div style={S.listCard}>
-            <div style={S.listHeader}>
+          <div className="manage-list-card" style={S.listCard}>
+            <div className="manage-list-header" style={S.listHeader}>
               <h3 style={S.cardTitle}>Gambar dalam Index</h3>
               {list && (
                 <span style={S.listMeta}>
@@ -71,7 +118,7 @@ export default function ManagePage() {
 
             {list && list.items.length > 0 ? (
               <>
-                <div style={S.imageGrid}>
+                <div className="manage-image-grid" style={S.imageGrid}>
                   {list.items.map((item) => (
                     <div key={item.image_id} style={S.imageItem} className="imageItem">
                       <img
@@ -99,7 +146,7 @@ export default function ManagePage() {
 
                 {/* Pagination */}
                 {list.total_pages > 1 && (
-                  <div style={S.pagination}>
+                  <div className="manage-pagination" style={S.pagination}>
                     <button
                       style={{ ...S.pageBtn, ...(currentPage <= 1 ? S.pageBtnDisabled : {}) }}
                       onClick={() => handlePageChange(currentPage - 1)}

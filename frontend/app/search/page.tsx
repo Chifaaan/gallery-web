@@ -436,9 +436,109 @@ export default function SearchPage() {
           border-color: ${colors.accentBorder} !important;
           box-shadow: 0 8px 24px ${colors.cardShadow};
         }
+
+        /* ── Mobile Responsive ── */
+        @media (max-width: 768px) {
+          .search-hero-title {
+            font-size: 28px !important;
+          }
+          .search-hero-subtitle {
+            font-size: 14px !important;
+          }
+          .search-main {
+            padding: 20px 14px !important;
+          }
+          .search-main-centered {
+            padding: 24px 14px 60px !important;
+          }
+          .search-panel {
+            padding: 14px 14px !important;
+            border-radius: 14px !important;
+          }
+          .search-text-row {
+            flex-direction: column !important;
+          }
+          .search-text-row .search-btn-warm {
+            width: 100%;
+            justify-content: center;
+          }
+          .mode-tab-text {
+            display: none !important;
+          }
+          .search-masonry-grid {
+            column-count: 2 !important;
+          }
+          .search-trust-steps {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .search-step-connector {
+            display: none !important;
+          }
+          .search-step-card {
+            max-width: none !important;
+          }
+          .search-results-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .search-results-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
+          }
+          .search-feedback-toast {
+            left: 12px !important;
+            right: 12px !important;
+            bottom: 12px !important;
+          }
+          .search-feedback-inner {
+            min-width: auto !important;
+            max-width: none !important;
+            flex-direction: column !important;
+            gap: 12px !important;
+          }
+          .search-modal-overlay {
+            padding: 8px !important;
+          }
+          .search-modal-content {
+            border-radius: 14px !important;
+            max-height: 95vh !important;
+          }
+          .search-modal-meta {
+            flex-direction: column !important;
+            gap: 8px !important;
+          }
+          .search-modal-download {
+            margin-left: 0 !important;
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .search-modal-body {
+            padding: 16px !important;
+          }
+          .search-chip-row {
+            gap: 6px !important;
+          }
+          .search-chip {
+            padding: 6px 12px !important;
+            font-size: 12px !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .search-hero-title {
+            font-size: 24px !important;
+          }
+          .search-results-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .search-masonry-grid {
+            column-count: 2 !important;
+          }
+        }
       `}</style>
 
-      <main style={{
+      <main className={hasResults ? 'search-main' : 'search-main search-main-centered'} style={{
         ...S.main,
         ...(hasResults ? {} : S.mainCentered),
       }}>
@@ -455,8 +555,8 @@ export default function SearchPage() {
                 <span>📷</span>
                 <span>Dikurasi dari Flickr</span>
               </div>
-              <h1 style={S.heroTitle}>Temukan Momen Keseharian</h1>
-              <p style={S.heroSubtitle}>
+              <h1 className="search-hero-title" style={S.heroTitle}>Temukan Momen Keseharian</h1>
+              <p className="search-hero-subtitle" style={S.heroSubtitle}>
                 Jelajahi ribuan foto autentik kegiatan manusia sehari-hari, dikurasi dari fotografer Flickr.
               </p>
             </div>
@@ -473,8 +573,15 @@ export default function SearchPage() {
               onClick={() => handleModeChange("text")}
             >
               <IconText />
-              <span>Cari berdasarkan Deskripsi</span>
+              <span className="mode-tab-text">Cari berdasarkan Deskripsi</span>
+              <span className="mode-tab-text-short" style={{ display: 'none' }}>Teks</span>
             </button>
+            <style>{`
+              @media (max-width: 768px) {
+                .mode-tab-text { display: none !important; }
+                .mode-tab-text-short { display: inline !important; }
+              }
+            `}</style>
             <button
               className="mode-tab-warm"
               style={{
@@ -484,16 +591,17 @@ export default function SearchPage() {
               onClick={() => handleModeChange("image")}
             >
               <IconImage />
-              <span>Cari berdasarkan Referensi</span>
+              <span className="mode-tab-text">Cari berdasarkan Referensi</span>
+              <span className="mode-tab-text-short" style={{ display: 'none' }}>Gambar</span>
             </button>
           </div>
 
           {/* Search Panel — Glassmorphism */}
-          <div style={S.searchPanel}>
+          <div className="search-panel" style={S.searchPanel}>
             {mode === "text" ? (
               /* ── Text Search Mode ── */
               <>
-                <div style={S.textInputRow}>
+                <div className="search-text-row" style={S.textInputRow}>
                   <div style={S.textInputWrapper}>
                     <span style={S.searchIcon}><IconSearch /></span>
                     <input
@@ -678,11 +786,11 @@ export default function SearchPage() {
                   <span>{group.emoji}</span>
                   <span>{group.label}</span>
                 </div>
-                <div style={S.chipRow}>
+                <div className="search-chip-row" style={S.chipRow}>
                   {group.chips.map((chip) => (
                     <button
                       key={chip.query}
-                      className="chip-warm"
+                      className="chip-warm search-chip"
                       style={{
                         ...S.chip,
                         ...(activeChipIdx === chip.query ? S.chipActive : {}),
@@ -711,7 +819,7 @@ export default function SearchPage() {
               <span style={S.masonrySectionIcon}>📸</span>
               <span style={S.masonrySectionTitle}>Contoh Galeri</span>
             </div>
-            <div style={S.masonryGrid}>
+            <div className="search-masonry-grid" style={S.masonryGrid}>
               {sampleImages.map((img, i) => (
                 <div
                   key={img.image_id}
@@ -745,30 +853,30 @@ export default function SearchPage() {
             animation: "fadeInUp 0.7s ease 0.45s both",
           }}>
             <h3 style={S.trustTitle}>Bagaimana cara kerjanya?</h3>
-            <div style={S.trustSteps}>
-              <div className="step-card-warm" style={S.stepCard}>
+            <div className="search-trust-steps" style={S.trustSteps}>
+              <div className="step-card-warm search-step-card" style={S.stepCard}>
                 <span style={S.stepEmoji}>✍️</span>
                 <span style={S.stepNumber}>1</span>
                 <p style={S.stepText}>Tulis deskripsi aktivitas</p>
                 <p style={S.stepDesc}>Deskripsikan gambar yang kamu bayangkan dalam Bahasa Indonesia</p>
               </div>
-              <div style={S.stepConnector}>
+              <div className="search-step-connector" style={S.stepConnector}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={colors.muted} strokeWidth="2" strokeLinecap="round">
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
               </div>
-              <div className="step-card-warm" style={S.stepCard}>
+              <div className="step-card-warm search-step-card" style={S.stepCard}>
                 <span style={S.stepEmoji}>🔍</span>
                 <span style={S.stepNumber}>2</span>
                 <p style={S.stepText}>AI cari foto terbaik dari Flickr</p>
                 <p style={S.stepDesc}>Model AI mencocokkan deskripsi dengan ribuan foto asli</p>
               </div>
-              <div style={S.stepConnector}>
+              <div className="search-step-connector" style={S.stepConnector}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={colors.muted} strokeWidth="2" strokeLinecap="round">
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
               </div>
-              <div className="step-card-warm" style={S.stepCard}>
+              <div className="step-card-warm search-step-card" style={S.stepCard}>
                 <span style={S.stepEmoji}>🖼️</span>
                 <span style={S.stepNumber}>3</span>
                 <p style={S.stepText}>Unduh / Gunakan fotonya</p>
@@ -781,7 +889,7 @@ export default function SearchPage() {
         {/* ── Results ── */}
         {results && (
           <section style={S.resultsSection}>
-            <div style={S.resultsHeader}>
+            <div className="search-results-header" style={S.resultsHeader}>
               <span style={S.resultCount}>
                 {results.total} gambar ditemukan
               </span>
@@ -808,7 +916,7 @@ export default function SearchPage() {
               </button>
             </div>
 
-            <div style={S.grid}>
+            <div className="search-results-grid" style={S.grid}>
               {results.results.map((item) => (
                 <ResultCard
                   key={item.image_id}
@@ -937,13 +1045,13 @@ function DetailModal({ item, colors, onClose }: { item: SearchResultItem; colors
   };
 
   return (
-    <div style={{
+    <div className="search-modal-overlay" style={{
       position: "fixed", inset: 0,
       background: colors.overlayBg, backdropFilter: "blur(6px)",
       display: "flex", alignItems: "center", justifyContent: "center",
       zIndex: 100, padding: 24,
     }} onClick={onClose}>
-      <div style={{
+      <div className="search-modal-content" style={{
         background: colors.surface, border: `1px solid ${colors.border}`,
         borderRadius: 18, maxWidth: 780, width: "100%",
         maxHeight: "90vh", overflow: "auto", position: "relative",
@@ -960,8 +1068,8 @@ function DetailModal({ item, colors, onClose }: { item: SearchResultItem; colors
           alt={item.captions_id[0] ?? ""}
           style={{ width: "100%", maxHeight: 380, objectFit: "contain", background: colors.bgAlt }}
         />
-        <div style={{ padding: "20px 24px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <div className="search-modal-body" style={{ padding: "20px 24px" }}>
+          <div className="search-modal-meta" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <span style={{
               background: colors.accentBg,
               border: `1px solid ${colors.accentBorder}`,
@@ -970,6 +1078,7 @@ function DetailModal({ item, colors, onClose }: { item: SearchResultItem; colors
             }}>Skor: {(item.score * 100).toFixed(1)}%</span>
             <span style={{ color: colors.muted, fontSize: 13 }}>Peringkat #{item.rank}</span>
             <button
+              className="search-modal-download"
               onClick={handleDownload}
               disabled={downloading}
               style={{
@@ -1038,11 +1147,11 @@ function FeedbackToast({ colors, onFeedback, feedbackSent, onDismiss }: {
         @keyframes toastSlideUp { from { transform: translateY(120%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes checkPop { 0% { transform: scale(0); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
       `}</style>
-      <div style={{
+      <div className="search-feedback-toast" style={{
         position: "fixed", bottom: 24, right: 24, zIndex: 200,
         animation: "toastSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards",
       }}>
-        <div style={{
+        <div className="search-feedback-inner" style={{
           background: colors.surface,
           backdropFilter: "blur(16px)",
           border: `1px solid ${colors.accentBorder}`,
