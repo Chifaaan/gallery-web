@@ -1,8 +1,3 @@
-"""
-models/schemas.py
-Pydantic schemas untuk request & response API
-"""
-
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
@@ -28,19 +23,13 @@ class SearchResponse(BaseModel):
 
 
 # ─── Text Search ───
-
 class TextSearchRequest(BaseModel):
     query  : str  = Field(..., min_length=1, max_length=500,
                            description="Query teks bahasa Indonesia")
     top_k  : int  = Field(default=10, ge=1, le=50)
 
 
-# ─── Multimodal Search ───
-# (Image search & multimodal via multipart form — lihat router)
-
-
 # ─── Index Management ───
-
 class ImageMetaIn(BaseModel):
     captions_id: list[str] = Field(default=[], description="Caption bahasa Indonesia")
     captions_en: list[str] = Field(default=[], description="Caption bahasa Inggris (opsional)")

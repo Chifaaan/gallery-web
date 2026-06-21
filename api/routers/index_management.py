@@ -1,8 +1,3 @@
-"""
-routers/index_management.py
-Endpoints untuk manajemen index gambar: tambah, hapus, list
-"""
-
 import io
 import os
 import shutil
@@ -22,13 +17,7 @@ def get_engine(request: Request):
     return request.app.state.engine
 
 
-# ─────────────────────────────────────────────────────────────
 # POST /api/v1/index/add
-# Form (multipart):
-#   files[]: list gambar (JPG/PNG)
-#   captions_id[]: caption ID per gambar (opsional, JSON array string)
-#   captions_en[]: caption EN per gambar (opsional, JSON array string)
-# ─────────────────────────────────────────────────────────────
 @router.post(
     "/add",
     response_model=AddImagesResponse,
@@ -101,9 +90,7 @@ async def add_images(
     )
 
 
-# ─────────────────────────────────────────────────────────────
 # DELETE /api/v1/index/{image_id}
-# ─────────────────────────────────────────────────────────────
 @router.delete(
     "/{image_id}",
     response_model=DeleteImageResponse,
@@ -133,9 +120,7 @@ async def delete_image(
     )
 
 
-# ─────────────────────────────────────────────────────────────
 # GET /api/v1/index/stats
-# ─────────────────────────────────────────────────────────────
 @router.get(
     "/stats",
     response_model=IndexStatsResponse,
@@ -145,9 +130,6 @@ async def get_stats(engine = Depends(get_engine)):
     return engine.get_stats()
 
 
-# ─────────────────────────────────────────────────────────────
-# GET /api/v1/index/list?page=1&limit=20
-# ─────────────────────────────────────────────────────────────
 @router.get(
     "/list",
     summary="Daftar semua gambar dalam index (paginated)",
@@ -172,7 +154,6 @@ async def list_images(
 
 
 # ─── Helpers ───
-
 def _ext_from_content_type(ct: str) -> str:
     return {
         "image/jpeg" : ".jpg",

@@ -1,8 +1,3 @@
-"""
-routers/search.py
-Endpoints pencarian: teks, gambar, dan multimodal
-"""
-
 import io
 import time
 from typing import Annotated, Optional
@@ -19,10 +14,8 @@ def get_engine(request: Request):
     return request.app.state.engine
 
 
-# ─────────────────────────────────────────────────────────────
+
 # POST /api/v1/search/text
-# Body: { "query": "anak bermain di pantai", "top_k": 10 }
-# ─────────────────────────────────────────────────────────────
 @router.post(
     "/text",
     response_model=SearchResponse,
@@ -45,10 +38,7 @@ async def search_by_text(
     )
 
 
-# ─────────────────────────────────────────────────────────────
 # POST /api/v1/search/image
-# Form: file=<image>, top_k=10
-# ─────────────────────────────────────────────────────────────
 @router.post(
     "/image",
     response_model=SearchResponse,
@@ -75,10 +65,7 @@ async def search_by_image(
     )
 
 
-# ─────────────────────────────────────────────────────────────
 # POST /api/v1/search/multimodal
-# Form: query=<teks>, file=<gambar>, text_weight=0.5, top_k=10
-# ─────────────────────────────────────────────────────────────
 @router.post(
     "/multimodal",
     response_model=SearchResponse,
@@ -111,7 +98,6 @@ async def search_multimodal(
 
 
 # ─── Helpers ───
-
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_SIZE_MB = 10
 

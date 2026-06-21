@@ -117,6 +117,7 @@ class SearchEngine:
     async def load(self):
         await asyncio.to_thread(self._load_sync)
 
+    #Fungsi buat mengecek ketersediaan embedding
     def _load_index(self):
         """Load image index dan metadata dari storage."""
         if self.index_path.exists() and self.metadata_path.exists():
@@ -186,15 +187,21 @@ class SearchEngine:
     @torch.no_grad()
     # Fungsi mengubah teks menjadi Embedding
     def _encode_text(self, text: str) -> np.ndarray:
+        # Pakai Tokenisasi BPE dan max length 77
         tokens = self.tokenizer(text).to(self.device)   # [1, 77]
+        # Panggil fungsi untuk melakukan encode text dengan normalisasi dari model
         emb = self.model.encode_text(tokens, normalize=True)
+        # Hasilnya embedding
         return emb.float().cpu().numpy()  # [1, 512]
 
     @torch.no_grad()
     # Fungsi mengubah gambar menjadi Embedding
     def _encode_image(self, pil_image: Image.Image) -> np.ndarray:
+        # Dilakukan Normalisasi seperti Preprocessing model
         img_tensor = IMAGE_TRANSFORM(pil_image.convert("RGB")).unsqueeze(0).to(self.device)
+        # Panggil fungsi untuk melakukan encode gambar dengan normalisasi dari model
         emb = self.model.encode_image(img_tensor, normalize=True)
+        # Hasilnya embedding
         return emb.float().cpu().numpy()  # [1, 512]
 
     # ─── Search ───
@@ -203,7 +210,9 @@ class SearchEngine:
         """Cari gambar berdasarkan teks."""
         if len(self.metadata) == 0:
             return []
+        # Mengubah Text Input Jadi Embedding dengan fungsi encode text
         query_emb = self._encode_text(query)    # [1, 512]
+        # Panggil fungsi perankingan buat menampilkan gambar
         return self._rank(query_emb, top_k)
     
     #Fungsi pencarian Berdasarkan Gambar
@@ -211,7 +220,9 @@ class SearchEngine:
         """Cari gambar serupa berdasarkan gambar query."""
         if len(self.metadata) == 0:
             return []
+        # Mengubah Image Input Jadi Embedding dengan fungsi encode image
         query_emb = self._encode_image(pil_image)   # [1, 512]
+        # Panggil fungsi perankingan buat menampilkan gambar
         return self._rank(query_emb, top_k)
 
     def search_by_text_and_image(
@@ -232,12 +243,15 @@ class SearchEngine:
         combined = combined / (norm + 1e-8)
         return self._rank(combined, top_k)
 
+    # Fungsi Perangkingan
     def _rank(self, query_emb: np.ndarray, top_k: int) -> list[dict]:
-        """Hitung similarity dan kembalikan top-k hasil."""
+        # Hitung Cosine Similarity image embedding dan text embedding
         sims = (self.image_index @ query_emb.T).squeeze()  # [N]
         if sims.ndim == 0:
             sims = sims.reshape(1)
+        # Baca nilai Top K yang diinput user
         k = min(top_k, len(self.metadata))
+        # Tampilkan Ranking dari yang terbesar
         top_idx = np.argsort(-sims)[:k]
 
         return [
