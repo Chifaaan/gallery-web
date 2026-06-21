@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 from typing import Optional
 
-
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -116,28 +115,20 @@ class SearchEngine:
         print("   ✅ CLIP Vanilla model fully loaded!")
 
     async def load(self):
-        """
-        Load model dan index. Dipanggil saat startup.
-        Menjalankan _load_sync() di thread executor agar tidak memblokir
-        event loop FastAPI.
-
-        Contoh penggunaan di main.py:
-            @app.on_event("startup")
-            async def startup():
-                await engine.load()
-        """
         await asyncio.to_thread(self._load_sync)
 
     def _load_index(self):
         """Load image index dan metadata dari storage."""
         if self.index_path.exists() and self.metadata_path.exists():
+        # Image Index merupakan Nilai Embedding image pada Dataset
             self.image_index = np.load(str(self.index_path))
+        # Ambil Informasi Metadata seperti nama file
             with open(self.metadata_path, encoding="utf-8") as f:
                 self.metadata = json.load(f)
             print(f"   Index loaded: {len(self.metadata)} images from storage")
 
         elif (self.export_dir / "image_index.npy").exists():
-            # Fallback ke hasil export notebook
+            # Kalau image_index.npy nggak ada di storage, ambil dari folder model
             raw_index = np.load(str(self.export_dir / "image_index.npy"))
             meta_path = self.export_dir / "test_metadata.json"
 
@@ -145,9 +136,7 @@ class SearchEngine:
                 with open(meta_path, encoding="utf-8") as f:
                     raw = json.load(f)
 
-                # Deduplikasi image_index jika jumlah row != jumlah gambar unik.
-                # image_index.npy dari notebook di-expand per caption (N_records),
-                # sedangkan test_metadata.json per gambar unik (N_images).
+                # Mencegah Gambar yang sama dipanggil dua kali
                 if raw_index.shape[0] != len(raw):
                     print(
                         f"   [INFO] Mismatch terdeteksi: {raw_index.shape[0]} records "
@@ -166,8 +155,7 @@ class SearchEngine:
 
                 self.image_index = raw_index
 
-                # Catatan: image_id dari Flickr sudah mengandung ekstensi
-                # (misal "3578068665_87bdacef6a.jpg"), jadi JANGAN tambahkan .jpg lagi
+                # pemanggilan nama index gambar berdasarkan nama file
                 self.metadata = [
                     {**m, "url": f"/images/{m['image_id']}"}
                     for m in raw
@@ -196,27 +184,29 @@ class SearchEngine:
 
     # ─── Encoding ───
     @torch.no_grad()
-    #Fungsi mengubah teks menjadi Embedding
+    # Fungsi mengubah teks menjadi Embedding
     def _encode_text(self, text: str) -> np.ndarray:
         tokens = self.tokenizer(text).to(self.device)   # [1, 77]
         emb = self.model.encode_text(tokens, normalize=True)
         return emb.float().cpu().numpy()  # [1, 512]
 
     @torch.no_grad()
-    #Fungsi mengubah gambar menjadi Embedding
+    # Fungsi mengubah gambar menjadi Embedding
     def _encode_image(self, pil_image: Image.Image) -> np.ndarray:
         img_tensor = IMAGE_TRANSFORM(pil_image.convert("RGB")).unsqueeze(0).to(self.device)
         emb = self.model.encode_image(img_tensor, normalize=True)
         return emb.float().cpu().numpy()  # [1, 512]
 
     # ─── Search ───
+    # Fungsi pencarian Berdasarkan Teks
     def search_by_text(self, query: str, top_k: int = 10) -> list[dict]:
         """Cari gambar berdasarkan teks."""
         if len(self.metadata) == 0:
             return []
         query_emb = self._encode_text(query)    # [1, 512]
         return self._rank(query_emb, top_k)
-
+    
+    #Fungsi pencarian Berdasarkan Gambar
     def search_by_image(self, pil_image: Image.Image, top_k: int = 10) -> list[dict]:
         """Cari gambar serupa berdasarkan gambar query."""
         if len(self.metadata) == 0:
