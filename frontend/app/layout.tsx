@@ -5,7 +5,7 @@ import { ThemeProvider } from "./ThemeContext";
 import { NavBar } from "./NavBar";
 
 export const metadata: Metadata = {
-  title      : "Galeri Foto Kehidupan Nyata",
+  title: "Smart Gallery",
   description: "Temukan momen keseharian — jelajahi ribuan foto autentik kegiatan manusia sehari-hari, dikurasi dari fotografer Flickr.",
 };
 
