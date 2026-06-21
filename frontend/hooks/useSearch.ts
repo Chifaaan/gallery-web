@@ -10,7 +10,6 @@ import {
   SearchResponse,
   searchByText,
   searchByImage,
-  searchMultimodal,
   APIError,
 } from "@/lib/api";
 
@@ -72,29 +71,10 @@ export function useSearch() {
     }
   }, []);
 
-  // ── Multimodal search ──
-  const searchMulti = useCallback(
-    async (query: string, file: File, textWeight = 0.5, topK = 10) => {
-      setLoading();
-      try {
-        const res = await searchMultimodal({ query, file, text_weight: textWeight, top_k: topK });
-        setState({
-          results  : res,
-          loading  : false,
-          error    : null,
-          lastQuery: query,
-        });
-      } catch (e) {
-        setError(e);
-      }
-    },
-    [],
-  );
-
   const clear = useCallback(() =>
     setState({ results: null, loading: false, error: null, lastQuery: null }), []);
 
-  return { ...state, searchText, searchImage, searchMulti, clear };
+  return { ...state, searchText, searchImage, clear };
 }
 
 
@@ -102,12 +82,11 @@ export function useSearch() {
  * hooks/useIndexManagement.ts
  * Custom hook untuk manajemen index gambar
  */
-import { addImages, deleteImage, getIndexStats, listIndexImages, IndexStats, IndexListResponse, AddImagesResponse } from "@/lib/api";
+import { deleteImage, getIndexStats, listIndexImages, IndexStats, IndexListResponse } from "@/lib/api";
 
 interface IndexState {
   stats    : IndexStats | null;
   list     : IndexListResponse | null;
-  uploading: boolean;
   error    : string | null;
 }
 
@@ -115,7 +94,6 @@ export function useIndexManagement() {
   const [state, setState] = useState<IndexState>({
     stats    : null,
     list     : null,
-    uploading: false,
     error    : null,
   });
 
@@ -137,31 +115,6 @@ export function useIndexManagement() {
     }
   }, []);
 
-  const uploadImages = useCallback(
-    async (
-      files      : File[],
-      captionsId ?: string[][],
-      captionsEn ?: string[][],
-    ): Promise<AddImagesResponse | null> => {
-      setState((s) => ({ ...s, uploading: true, error: null }));
-      try {
-        const res = await addImages({
-          files,
-          captions_id: captionsId ?? files.map(() => []),
-          captions_en: captionsEn ?? files.map(() => []),
-        });
-        setState((s) => ({ ...s, uploading: false }));
-        await fetchStats();
-        return res;
-      } catch (e) {
-        const msg = e instanceof APIError ? e.message : String(e);
-        setState((s) => ({ ...s, uploading: false, error: msg }));
-        return null;
-      }
-    },
-    [fetchStats],
-  );
-
   const removeImage = useCallback(
     async (imageId: string): Promise<boolean> => {
       try {
@@ -176,5 +129,5 @@ export function useIndexManagement() {
     [fetchStats],
   );
 
-  return { ...state, fetchStats, fetchList, uploadImages, removeImage };
+  return { ...state, fetchStats, fetchList, removeImage };
 }

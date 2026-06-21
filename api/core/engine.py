@@ -1,31 +1,17 @@
-"""
-core/engine.py
-Wrapper utama untuk model CLIP Vanilla (Fine-tuned) — load, encode, search, index management.
-
-Arsitektur CLIP Vanilla (Fine-tuned):
-  - Text encoder:  CLIP ViT-B/32 text transformer (fine-tuned) → L2 normalize
-  - Image encoder: CLIP ViT-B/32 visual transformer (fine-tuned bersama teks)
-  - Embedding space: 512-dim (shared antara text dan image)
-"""
-
 import asyncio
 import json
 import os
-import uuid
 from pathlib import Path
 from typing import Optional
 
-from core.explainability import ExplainabilityAnalyzer, ExplainResult
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
 import open_clip
-
-
-# ─── Image transform (harus sama dengan training CLIP ViT-B/32) ───
 import torchvision.transforms as T
+
 
 IMAGE_TRANSFORM = T.Compose([
     T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
@@ -38,14 +24,7 @@ IMAGE_TRANSFORM = T.Compose([
 ])
 
 
-# ─── Search Engine ───
-
 class SearchEngine:
-    """
-    Encapsulates the trained CLIP Vanilla (Fine-tuned) model and image index.
-    Thread-safe untuk digunakan dalam FastAPI async context.
-    """
-
     def __init__(self, export_dir: str, device: str = "auto"):
         self.export_dir = Path(export_dir)
         self.device = self._resolve_device(device)
@@ -58,7 +37,6 @@ class SearchEngine:
         self.metadata: list[dict] = []                  # [{image_id, url, captions_id, ...}]
         self.index_path = Path("./storage/index.npy")
         self.metadata_path = Path("./storage/metadata.json")
-        self._lock = asyncio.Lock()                     # lock untuk operasi index concurrent
         os.makedirs("./storage", exist_ok=True)
 
     def _resolve_device(self, device: str) -> str:
@@ -66,14 +44,9 @@ class SearchEngine:
             return "cuda" if torch.cuda.is_available() else "cpu"
         return device
 
+    #Fungsi utama untuk memuat model
     def _load_sync(self):
-        """
-        Load model dan index secara synchronous.
-        Dipanggil dari load() melalui asyncio.to_thread() agar tidak
-        memblokir event loop FastAPI saat startup.
-        """
-
-        # 1. Load finetuned text encoder checkpoint (untuk config + text weights)
+        # 1. Load finetuned text encoder dari lokal
         print("   Loading CLIP text encoder checkpoint (finetuned)...")
         text_ckpt = torch.load(
             self.export_dir / "clip_text_encoder_finetuned.pt",
@@ -222,28 +195,21 @@ class SearchEngine:
             json.dump(self.metadata, f, ensure_ascii=False)
 
     # ─── Encoding ───
-
     @torch.no_grad()
+    #Fungsi mengubah teks menjadi Embedding
     def _encode_text(self, text: str) -> np.ndarray:
-        """
-        Encode teks menggunakan CLIP text encoder (finetuned).
-        Text → CLIP Tokenizer → CLIP Text Transformer → L2 normalize
-        """
         tokens = self.tokenizer(text).to(self.device)   # [1, 77]
         emb = self.model.encode_text(tokens, normalize=True)
         return emb.float().cpu().numpy()  # [1, 512]
 
     @torch.no_grad()
+    #Fungsi mengubah gambar menjadi Embedding
     def _encode_image(self, pil_image: Image.Image) -> np.ndarray:
-        """
-        Encode gambar menggunakan CLIP ViT-B/32 visual encoder (finetuned).
-        """
         img_tensor = IMAGE_TRANSFORM(pil_image.convert("RGB")).unsqueeze(0).to(self.device)
         emb = self.model.encode_image(img_tensor, normalize=True)
         return emb.float().cpu().numpy()  # [1, 512]
 
     # ─── Search ───
-
     def search_by_text(self, query: str, top_k: int = 10) -> list[dict]:
         """Cari gambar berdasarkan teks."""
         if len(self.metadata) == 0:
@@ -293,59 +259,6 @@ class SearchEngine:
             for i, idx in enumerate(top_idx)
         ]
 
-    # ─── Index Management ───
-
-    def add_images(self, images_with_meta: list[dict]) -> list[str]:
-        """
-        Tambahkan gambar baru ke index.
-        images_with_meta: [{"pil_image": PIL.Image, "captions_id": [...], "url": str, ...}]
-        Returns: list of assigned image_ids
-
-        Catatan: fitur ini belum digunakan. Lock asyncio (_lock) sudah
-        disiapkan di __init__ apabila fitur ini diaktifkan di masa mendatang
-        untuk mencegah race condition pada concurrent request.
-        """
-        new_embs = []
-        new_meta = []
-        assigned_ids = []
-
-        for item in images_with_meta:
-            pil_img = item["pil_image"]
-            emb = self._encode_image(pil_img)   # [1, 512]
-            new_embs.append(emb)
-
-            image_id = str(uuid.uuid4())
-            assigned_ids.append(image_id)
-            new_meta.append({
-                "image_id"   : image_id,
-                "url"        : item.get("url", ""),
-                "captions_id": item.get("captions_id", []),
-                "captions_en": item.get("captions_en", []),
-                "filename"   : item.get("filename", ""),
-                "added_at"   : item.get("added_at", ""),
-            })
-
-        if new_embs:
-            new_matrix = np.vstack(new_embs)        # [M, 512]
-            if self.image_index.shape[0] == 0:
-                self.image_index = new_matrix
-            else:
-                self.image_index = np.vstack([self.image_index, new_matrix])
-            self.metadata.extend(new_meta)
-            self._persist_index()
-
-        return assigned_ids
-
-    def delete_image(self, image_id: str) -> bool:
-        """Hapus gambar dari index berdasarkan image_id."""
-        idx = next((i for i, m in enumerate(self.metadata) if m["image_id"] == image_id), None)
-        if idx is None:
-            return False
-        self.metadata.pop(idx)
-        self.image_index = np.delete(self.image_index, idx, axis=0)
-        self._persist_index()
-        return True
-
     def get_stats(self) -> dict:
         return {
             "total_images": len(self.metadata),
@@ -353,43 +266,3 @@ class SearchEngine:
             "device"      : self.device,
             "model_loaded": self.model is not None,
         }
-
-    # ─── Explainability (on-demand, BUKAN saat search) ───
-
-    def get_explainability(
-        self,
-        query: str,
-        image_id: str,
-        analyses: list[str] | None = None,
-    ) -> ExplainResult:
-        """
-        Analisis explainability untuk pasangan query-image.
-        Dipanggil HANYA saat user membuka modal detail, bukan saat pencarian.
-
-        Args:
-            query: teks query yang digunakan saat search
-            image_id: ID gambar yang ingin dianalisis
-            analyses: subset dari ["attention", "token_contribution", "embedding"]
-
-        Returns:
-            ExplainResult dengan data ketiga analisis
-        """
-        # Cari index gambar berdasarkan image_id
-        idx = next(
-            (i for i, m in enumerate(self.metadata) if m["image_id"] == image_id),
-            None,
-        )
-        if idx is None:
-            raise ValueError(f"Image ID tidak ditemukan: {image_id}")
-
-        image_embedding = self.image_index[idx]     # [512]
-
-        analyzer = ExplainabilityAnalyzer()
-        return analyzer.analyze(
-            query_text=query,
-            image_embedding=image_embedding,
-            model=self.model,
-            tokenizer=self.tokenizer,
-            device=self.device,
-            analyses=analyses,
-        )

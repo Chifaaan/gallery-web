@@ -10,8 +10,7 @@ from contextlib import asynccontextmanager
 import os
 
 from core.engine import SearchEngine
-from core.feedback_db import FeedbackDB
-from routers import search, index_management, health, explainability, feedback
+from routers import search, index_management, health
 
 
 # ─── Lifespan: load model saat startup, cleanup saat shutdown ───
@@ -24,10 +23,6 @@ async def lifespan(app: FastAPI):
     )
     await app.state.engine.load()
     print("✅ Model loaded and ready!")
-
-    # Inisialisasi Feedback DB
-    app.state.feedback_db = FeedbackDB()
-    await app.state.feedback_db.init()
 
     yield
     print("👋 Shutting down...")
@@ -58,8 +53,6 @@ app.mount("/images", StaticFiles(directory="./storage/images"), name="images")
 app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 app.include_router(search.router, prefix="/api/v1/search", tags=["Search"])
 app.include_router(index_management.router, prefix="/api/v1/index", tags=["Index Management"])
-app.include_router(explainability.router, prefix="/api/v1", tags=["Explainability"])
-app.include_router(feedback.router, prefix="/api/v1/feedback", tags=["Feedback"])
 
 
 if __name__ == "__main__":

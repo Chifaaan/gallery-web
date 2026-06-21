@@ -6,8 +6,6 @@ import { useTheme, type ThemeColors } from "@/app/ThemeContext";
 import {
   resolveImageUrl,
   SearchResultItem,
-  submitFeedback,
-  SearchResponse,
   listIndexImages,
 } from "@/lib/api";
 
@@ -176,11 +174,7 @@ export default function SearchPage() {
   const [sampleImages, setSampleImages] = useState<SampleImage[]>([]);
   const [samplesLoaded, setSamplesLoaded] = useState(false);
 
-  // ── Feedback Toast state ──
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [feedbackSent, setFeedbackSent] = useState(false);
-  const [feedbackQuery, setFeedbackQuery] = useState<{ query: string; results: SearchResponse } | null>(null);
-  const [searchTimestamp, setSearchTimestamp] = useState<string>("");
+
 
   // ── Active chip highlight ──
   const [activeChipIdx, setActiveChipIdx] = useState<string | null>(null);
@@ -220,20 +214,12 @@ export default function SearchPage() {
   // ── Text search submit ──
   const handleTextSubmit = useCallback(async () => {
     if (!query.trim()) return;
-    const ts = new Date().toISOString();
-    setSearchTimestamp(ts);
-    setShowFeedback(false);
-    setFeedbackSent(false);
     await searchText(query, topK);
   }, [query, topK, searchText]);
 
   // ── Image search submit ──
   const handleImageSubmit = useCallback(async () => {
     if (!imageFile) return;
-    const ts = new Date().toISOString();
-    setSearchTimestamp(ts);
-    setShowFeedback(false);
-    setFeedbackSent(false);
     await searchImage(imageFile, topK);
   }, [imageFile, topK, searchImage]);
 
@@ -242,45 +228,11 @@ export default function SearchPage() {
     (chipQuery: string) => {
       setQuery(chipQuery);
       setMode("text");
-      // Auto-submit after setting query
-      const ts = new Date().toISOString();
-      setSearchTimestamp(ts);
-      setShowFeedback(false);
-      setFeedbackSent(false);
       searchText(chipQuery, topK);
     },
     [searchText, topK]
   );
 
-  // Trigger feedback toast setelah results berubah
-  useEffect(() => {
-    if (!results || loading || feedbackSent) return;
-    setFeedbackQuery({
-      query: results.query_text ?? "",
-      results,
-    });
-    const timer = setTimeout(() => setShowFeedback(true), 1500);
-    return () => clearTimeout(timer);
-  }, [results, loading, feedbackSent]);
-
-  const handleFeedback = useCallback(async (isRelevant: boolean) => {
-    if (!feedbackQuery) return;
-    setFeedbackSent(true);
-    try {
-      await submitFeedback({
-        query_text: feedbackQuery.query,
-        category: mode === "text" ? "text" : "image",
-        is_relevant: isRelevant,
-        timestamp: searchTimestamp,
-        elapsed_ms: feedbackQuery.results.elapsed_ms,
-        top_k: topK,
-        total_results: feedbackQuery.results.total,
-      });
-    } catch (e) {
-      console.error("Gagal mengirim feedback:", e);
-    }
-    setTimeout(() => setShowFeedback(false), 2000);
-  }, [feedbackQuery, searchTimestamp, topK, mode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) handleTextSubmit();
@@ -326,16 +278,8 @@ export default function SearchPage() {
     setTopK(newK);
     if (hasResults) {
       if (mode === "text" && query.trim()) {
-        const ts = new Date().toISOString();
-        setSearchTimestamp(ts);
-        setShowFeedback(false);
-        setFeedbackSent(false);
         await searchText(query, newK);
       } else if (mode === "image" && imageFile) {
-        const ts = new Date().toISOString();
-        setSearchTimestamp(ts);
-        setShowFeedback(false);
-        setFeedbackSent(false);
         await searchImage(imageFile, newK);
       }
     }
@@ -486,17 +430,7 @@ export default function SearchPage() {
             align-items: flex-start !important;
             gap: 8px !important;
           }
-          .search-feedback-toast {
-            left: 12px !important;
-            right: 12px !important;
-            bottom: 12px !important;
-          }
-          .search-feedback-inner {
-            min-width: auto !important;
-            max-width: none !important;
-            flex-direction: column !important;
-            gap: 12px !important;
-          }
+
           .search-modal-overlay {
             padding: 8px !important;
           }
@@ -939,15 +873,6 @@ export default function SearchPage() {
         />
       )}
 
-      {/* ── Feedback Toast ── */}
-      {showFeedback && (
-        <FeedbackToast
-          colors={colors}
-          onFeedback={handleFeedback}
-          feedbackSent={feedbackSent}
-          onDismiss={() => setShowFeedback(false)}
-        />
-      )}
     </div>
   );
 }
@@ -1127,94 +1052,7 @@ function DetailModal({ item, colors, onClose }: { item: SearchResultItem; colors
   );
 }
 
-// ─── Feedback Toast ───────────────────────────────────────────
 
-function FeedbackToast({ colors, onFeedback, feedbackSent, onDismiss }: {
-  colors: ThemeColors;
-  onFeedback: (isRelevant: boolean) => void;
-  feedbackSent: boolean;
-  onDismiss: () => void;
-}) {
-  useEffect(() => {
-    if (feedbackSent) return;
-    const timer = setTimeout(() => onDismiss(), 15000);
-    return () => clearTimeout(timer);
-  }, [feedbackSent, onDismiss]);
-
-  return (
-    <>
-      <style>{`
-        @keyframes toastSlideUp { from { transform: translateY(120%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes checkPop { 0% { transform: scale(0); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
-      `}</style>
-      <div className="search-feedback-toast" style={{
-        position: "fixed", bottom: 24, right: 24, zIndex: 200,
-        animation: "toastSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-      }}>
-        <div className="search-feedback-inner" style={{
-          background: colors.surface,
-          backdropFilter: "blur(16px)",
-          border: `1px solid ${colors.accentBorder}`,
-          borderRadius: 16, padding: "16px 20px",
-          display: "flex", alignItems: "center", gap: 16,
-          minWidth: 340, maxWidth: 440,
-          boxShadow: `0 8px 32px ${colors.cardShadow}`,
-        }}>
-          {!feedbackSent ? (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
-                <span style={{ fontSize: 24 }}>💬</span>
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: colors.text, margin: 0 }}>Bagaimana hasil pencariannya?</p>
-                  <p style={{ fontSize: 12, color: colors.muted, margin: "2px 0 0 0" }}>Apakah hasil yang ditampilkan sesuai?</p>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <button style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  padding: "8px 14px", borderRadius: 10,
-                  border: `1px solid ${colors.successBorder}`,
-                  background: colors.successBg, color: colors.successText,
-                  fontSize: 13, fontWeight: 600, cursor: "pointer",
-                }} onClick={() => onFeedback(true)}>
-                  <span style={{ fontSize: 18 }}>👍</span><span>Sesuai</span>
-                </button>
-                <button style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  padding: "8px 14px", borderRadius: 10,
-                  border: `1px solid ${colors.errorBorder}`,
-                  background: colors.errorBg, color: colors.errorText,
-                  fontSize: 13, fontWeight: 600, cursor: "pointer",
-                }} onClick={() => onFeedback(false)}>
-                  <span style={{ fontSize: 18 }}>👎</span><span>Tidak</span>
-                </button>
-                <button style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: 28, height: 28, borderRadius: 8,
-                  border: `1px solid ${colors.border}`, background: "transparent",
-                  color: colors.muted, cursor: "pointer", padding: 0,
-                }} onClick={onDismiss}>
-                  <IconX />
-                </button>
-              </div>
-            </>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, color: colors.successText, fontSize: 14, fontWeight: 600 }}>
-              <span style={{
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-                width: 24, height: 24, borderRadius: "50%",
-                background: colors.successBg, color: colors.successText,
-                fontSize: 14, fontWeight: 700,
-                animation: "checkPop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-              }}>✓</span>
-              <span>Terima kasih atas feedback Anda!</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
 
 // ─── Styles Builder ───────────────────────────────────────────
 
